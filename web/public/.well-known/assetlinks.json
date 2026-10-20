@@ -1,10 +1,15 @@
 [
   {
-    "relation": ["delegate_permission/common.handle_all_urls"],
+    "relation": [
+      "delegate_permission/common.handle_all_urls"
+    ],
     "target": {
       "namespace": "android_app",
       "package_name": "it.footballlite.app",
-      "sha256_cert_fingerprints": ["6F:84:7C:7D:B8:8F:EC:5A:08:F1:D3:C6:8F:7E:06:85:DC:D9:07:FB:01:0B:16:2B:4F:11:28:7A:FC:B3:CA:34"]
+      "sha256_cert_fingerprints": [
+        "6F:84:7C:7D:B8:8F:EC:5A:08:F1:D3:C6:8F:7E:06:85:DC:D9:07:FB:01:0B:16:2B:4F:11:28:7A:FC:B3:CA:34",
+        "3E:D2:09:12:BA:7F:B1:6B:8A:AD:C2:95:F8:32:90:7B:79:E5:9F:F1:B6:D4:65:E3:5C:C7:EF:CB:51:81:4C:CD"
+      ]
     }
   }
 ]
