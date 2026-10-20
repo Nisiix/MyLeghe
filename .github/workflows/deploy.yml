@@ -44,6 +44,11 @@ jobs:
       - run: npm ci
       - run: npm test
       - run: npm run typecheck
+      - name: Diagnostica Cloudflare (account, permessi del token, database D1 visibili)
+        working-directory: worker
+        run: |
+          npx wrangler whoami || true
+          npx wrangler d1 list || true
       - name: Migrazioni D1
         run: npm run db:migrate -w worker
       - name: Build e deploy
