@@ -398,6 +398,30 @@ A Esposito Se.`;
     expect(r.warnings.some((w) => w.includes("10 titolari"))).toBe(true);
   });
 
+  it("titolari prima della riga tratteggiata e riserve dopo, anche con grassetto e trattini spaziati", () => {
+    const text = `*Skibidi Boppy* (4-3-3)
+*Vicario*
+*Miranda J.*
+*Ostigard*
+*Tavares N.*
+*Celik*
+*Zielinski*
+*Rabiot*
+*McKennie*
+*Ramos G.*
+*Varela G.*
+*Adams C.*
+- - - - - - - - - -
+Meret
+Mina
+Politano`;
+    const r = parseLineupText(text, roster, cfg);
+    expect(r.module).toBe("433");
+    expect(r.starters).toEqual(["1", "4", "5", "6", "7", "11", "12", "13", "18", "19", "20"]);
+    expect(r.bench).toEqual(["2", "8", "14"]);
+    expect(r.unmatched).toEqual([]);
+  });
+
   it("non confonde l'iniziale del nome con il ruolo", () => {
     const r = parseLineupText("Adams C.\nMartinez L.\nRamos G", roster, cfg);
     expect(r.starters).toEqual(["20", "23", "18"]);

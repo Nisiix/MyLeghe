@@ -64,7 +64,8 @@ function items(text: string): Item[] {
   for (const raw of text.split(/\r?\n/)) {
     let line = raw.replace(/\s+/g, " ").trim();
     if (!line) continue;
-    if (/^[-–—=_*.·]{3,}$/.test(line)) { startBench(); continue; }
+    // Riga di trattini (anche con spazi, es. «- - - -»): prima ci sono i titolari, dopo le riserve.
+    if (/^[-–—=_*.· ]+$/.test(line) && line.replace(/\s/g, "").length >= 3) { startBench(); continue; }
     const low = normalizeName(line);
     // Intestazioni: nome squadra con il modulo, «By …», «Modulo 3-4-3», «Giornata 8»…
     if (findModule(line) && !/[,;]/.test(line)) continue;
