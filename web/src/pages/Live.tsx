@@ -98,7 +98,7 @@ function Scoreboard({ match, names, calc, simulate, phase }: { match: CalendarRo
     <section className="hero rounded-2xl p-5 text-chalk" aria-label="Tabellone">
       <div className="mb-3 flex items-baseline justify-between text-xs text-chalk/70">
         <span>{match.league_day}ª giornata di lega</span>
-        <span>{phase === "live" ? "Live · risultato stimato" : phase === "finished" ? "Finale stimato" : "Da giocare · stima"}</span>
+        <span>{phase === "live" ? "Live" : phase === "finished" ? "Finale" : "Da giocare"}</span>
       </div>
       <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-3 text-center">
         <Side id={match.home_team_id} name={names.get(match.home_team_id) ?? ""} />
