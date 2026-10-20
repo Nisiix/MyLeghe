@@ -4,7 +4,6 @@ import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { useLeague } from "../lib/data";
 import { session, useLeagues, useSession } from "../lib/session";
 import { setTheme, useTheme } from "../lib/theme";
-import { DataStatusBanner } from "./DataStatus";
 import { Drawer, Sheet, Switch, TeamBadge } from "./ui";
 
 const ICONS: Record<string, ReactNode> = {
@@ -148,7 +147,6 @@ export function Layout() {
         </button>
       </header>
       <main className="flex-1 px-3 pt-4 pb-28">
-        <DataStatusBanner />
         <Outlet />
       </main>
       <TabBar />
