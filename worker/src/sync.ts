@@ -2,6 +2,7 @@
 
 import { normalizeName, subRolesFromLineup } from "@footballlite/core";
 import type { Env } from "./env";
+import { rematchUnmatched } from "./matching";
 import { activeRound, kvRead, kvSet, matchesOf, refreshMatchday, refreshStandings, type SaMatch } from "./schedule";
 import { BSD_SERIE_A, bsdGet, bsdList, quotaUsed, BSD_DAILY_BUDGET, CallCapError, SourceError } from "./sources";
 import { sourcesAccepted } from "./terms";
@@ -85,7 +86,12 @@ export async function syncPlayers(env: Env, budget: Budget): Promise<void> {
   } finally {
     await kvSet(env, "bsd:playersProgress", { day, done: [...done] });
   }
-  if (teams.teams.every((t) => done.has(t.id))) await kvSet(env, "bsd:playersDay", day);
+  if (teams.teams.every((t) => done.has(t.id))) {
+    await kvSet(env, "bsd:playersDay", day);
+    // Giocatori aggiornati: le rose importate prima (o con nomi nuovi) vengono riabbinate senza intervento dell'admin.
+    const r = await rematchUnmatched(env.DB);
+    if (r.checked) console.log(`riabbinati ${r.matched}/${r.checked} giocatori delle rose`);
+  }
 }
 
 const sameTeam = (a: string, b: string) => {

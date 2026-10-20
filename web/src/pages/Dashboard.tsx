@@ -156,7 +156,15 @@ function RiskCard() {
           ))}
         </ul>
       )}
-      {unmatched > 0 && <p className="mt-2 text-[11px] text-muted">{unmatched} giocatori non abbinati alla fonte dati: titolarità non disponibile.</p>}
+      {unmatched > 0 && (
+        <p className="mt-2 text-[11px] text-muted">
+          {unmatched === roster.length ? "Nessun giocatore della rosa è abbinato" : `${unmatched} giocatori non abbinati`} alla fonte dati: titolarità non disponibile.{" "}
+          {unmatched === roster.length
+            ? "Di solito i giocatori di Serie A non sono ancora stati scaricati: l'abbinamento avviene da solo dopo la prima sincronizzazione (una volta al giorno)."
+            : "L'admin può abbinarli a mano."}
+          {s.admin && <> Stato in <Link to="/admin" className="underline">Admin → Abbinamenti</Link>.</>}
+        </p>
+      )}
       <p className="mt-2 text-[11px] text-muted">Titolarità stimata da FootballLite su dati BSD (formazioni probabili/ufficiali, indisponibili, ultime partite).</p>
     </Card>
   );

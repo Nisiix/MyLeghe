@@ -48,6 +48,8 @@ export interface RosterEntry {
   id: string;
   name: string;
   role: Role;
+  /** Crediti pagati all'asta: a parità di stima (es. senza dati della fonte) conta come indicazione del valore. */
+  cost?: number;
 }
 
 export interface ScoredPlayer extends RosterEntry {
@@ -75,9 +77,13 @@ export interface SuggestedLineup {
   vice: string | null;
 }
 
+/** Ordine per punteggio atteso; a parità (o senza stime) per costo d'asta. */
+export const byValue = (a: ScoredPlayer, b: ScoredPlayer) => (nz(b.score) - nz(a.score)) || ((b.cost ?? 0) - (a.cost ?? 0));
+const nz = (x: number) => (Number.isFinite(x) ? x : 0);
+
 /** Sceglie tra i moduli della lega quello con il punteggio atteso più alto. */
 export function suggestLineup(scored: ScoredPlayer[], cfg: LeagueConfig): SuggestedLineup | null {
-  const byRole = (r: Role) => scored.filter((p) => p.role === r).sort((a, b) => b.score - a.score);
+  const byRole = (r: Role) => scored.filter((p) => p.role === r).sort(byValue);
   const [gk, def, mid, att] = ROLES.map(byRole);
   if (!gk.length) return null;
   let best: SuggestedLineup | null = null;
@@ -87,11 +93,11 @@ export function suggestLineup(scored: ScoredPlayer[], cfg: LeagueConfig): Sugges
     const [d, c, a] = shape;
     if (def.length < d || mid.length < c || att.length < a) continue;
     const starters = [gk[0], ...def.slice(0, d), ...mid.slice(0, c), ...att.slice(0, a)];
-    const total = round2(starters.reduce((s, p) => s + p.score, 0));
+    const total = round2(starters.reduce((s, p) => s + nz(p.score), 0));
     if (!best || total > best.total) best = { module: mod, starters, bench: [], total, captain: null, vice: null };
   }
   if (!best) return null;
-  const byScore = [...best.starters].sort((a, b) => b.score - a.score);
+  const byScore = [...best.starters].sort(byValue);
   best.captain = byScore[0]?.id ?? null;
   best.vice = byScore[1]?.id ?? null;
   const used = new Set(best.starters.map((p) => p.id));
@@ -102,7 +108,7 @@ export function suggestLineup(scored: ScoredPlayer[], cfg: LeagueConfig): Sugges
 /** Panchina in ordine di ruolo (P, D, C, A), i migliori per primi; rispetta i panchinari per ruolo se la lega li fissa. */
 export function orderBench(rest: ScoredPlayer[], count: number, perRole: LeagueConfig["benchPerRole"] = null): ScoredPlayer[] {
   return ROLES.flatMap((r) => {
-    const list = rest.filter((p) => p.role === r).sort((a, b) => b.score - a.score);
+    const list = rest.filter((p) => p.role === r).sort(byValue);
     return perRole ? list.slice(0, perRole[r - 1]) : list;
   }).slice(0, count);
 }

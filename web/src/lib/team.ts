@@ -13,7 +13,7 @@ export function rosterOf(data: LeagueData, teamId: number): RosterPlayer[] {
 
 export function scoredRoster(roster: RosterPlayer[], outlook: Record<string, Outlook> | undefined, cfg: LeagueConfig): (ScoredPlayer & { info: RosterPlayer; outlook?: Outlook })[] {
   const map = new Map(roster.filter((p) => p.ext_id && outlook?.[p.ext_id]).map((p) => [String(p.slot), outlook![p.ext_id!]]));
-  return scorePlayers(roster.map((p) => ({ id: String(p.slot), name: p.name, role: p.role })), map, cfg)
+  return scorePlayers(roster.map((p) => ({ id: String(p.slot), name: p.name, role: p.role, cost: p.cost })), map, cfg)
     .map((s, i) => {
       const info = roster[i];
       const o = info.ext_id ? outlook?.[info.ext_id] : undefined;

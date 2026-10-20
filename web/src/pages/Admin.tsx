@@ -204,6 +204,35 @@ function UsersCard() {
 
 interface UnmatchedRow { team_id: number; slot: number; name: string; role: number; team: string; candidates: { id: number; name: string; teamName?: string; score: number }[] }
 
+interface SourcesState {
+  accepted: boolean; poolSize: number; playersUpdatedAt: number | null; bsdUsedToday: number; bsdBudget: number;
+  lastSync: { at: number; ok: boolean; error?: string; used?: number; calls?: number; skipped?: string } | null; unmatched: number; rosterSize: number;
+}
+
+/** Stato della fonte dati: spiega perché i giocatori non sono abbinati (fonte vuota, termini non accettati, errore del cron). */
+function SourcesNote() {
+  const q = useQuery({ queryKey: ["sources"], queryFn: () => api<SourcesState>("/league/admin/sources"), refetchInterval: 60_000 });
+  const d = q.data;
+  if (!d) return null;
+  const when = (t: number) => new Date(t).toLocaleString("it-IT", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
+  return (
+    <div className="mb-3 rounded-xl border border-line bg-surface-2 p-3 text-xs">
+      {d.poolSize === 0 ? (
+        <p className="text-danger">
+          <b>Nessun giocatore di Serie A scaricato dalla fonte dati</b>: senza di loro nessuna rosa può essere abbinata e la titolarità non è disponibile.{" "}
+          {!d.accepted ? "Serve prima l'accettazione dei termini delle fonti (riquadro in alto)." : d.lastSync?.error ? `Ultima sincronizzazione fallita (${when(d.lastSync.at)}): ${d.lastSync.error}` : d.lastSync ? `Ultima sincronizzazione ${when(d.lastSync.at)}: i giocatori vengono scaricati a blocchi, riprova tra qualche minuto.` : "La sincronizzazione non è ancora partita: il cron gira ogni 5 minuti."}
+        </p>
+      ) : (
+        <p className="text-muted">
+          Fonte dati: <b>{d.poolSize}</b> giocatori di Serie A{d.playersUpdatedAt ? `, aggiornati il ${when(d.playersUpdatedAt)}` : ""}. Rosa della lega: {d.rosterSize - d.unmatched}/{d.rosterSize} abbinati.
+          {d.lastSync && !d.lastSync.ok && <> Ultima sincronizzazione fallita ({when(d.lastSync.at)}): {d.lastSync.error}.</>}
+          {" "}Richieste BSD oggi: {d.bsdUsedToday}/{d.bsdBudget}.
+        </p>
+      )}
+    </div>
+  );
+}
+
 function Unmatched() {
   const qc = useQueryClient();
   const q = useQuery({ queryKey: ["unmatched"], queryFn: () => api<UnmatchedRow[]>("/league/admin/unmatched") });
@@ -219,14 +248,24 @@ function Unmatched() {
     const res = await api<{ id: number; name: string; team_name: string }[]>(`/league/admin/players?q=${encodeURIComponent(text.trim())}`);
     setSearch((s) => ({ ...s, [`${r.team_id}-${r.slot}`]: res }));
   }
+  const [rematchMsg, setRematchMsg] = useState<string | null>(null);
   async function rematch() {
-    await api("/league/admin/rematch", { method: "POST", body: {} });
-    await qc.invalidateQueries({ queryKey: ["unmatched"] });
+    setRematchMsg(null);
+    try {
+      const r = await api<{ checked: number; matched: number }>("/league/admin/rematch", { method: "POST", body: {} });
+      setRematchMsg(r.checked ? `Controllati ${r.checked} giocatori, abbinati ${r.matched}.` : "Nessun giocatore da riabbinare.");
+      await qc.invalidateQueries({ queryKey: ["unmatched"] });
+      await qc.invalidateQueries({ queryKey: ["sources"] });
+      await qc.invalidateQueries({ queryKey: ["league"] });
+      await qc.invalidateQueries({ queryKey: ["outlook"] });
+    } catch (e) { setRematchMsg((e as Error).message); }
   }
 
   return (
-    <Card title="Abbinamenti da verificare" action={<button className="text-sm font-semibold text-accent" onClick={rematch}>Riprova automatico</button>}>
-      <p className="mb-3 text-sm text-muted">Giocatori del file non abbinati con certezza ai giocatori di Serie A della fonte dati: senza abbinamento non hanno titolarità né voti stimati.</p>
+    <Card title="Abbinamenti" action={<button className="text-sm font-semibold text-accent" onClick={rematch}>Riprova automatico</button>}>
+      <SourcesNote />
+      <p className="mb-3 text-sm text-muted">Giocatori del file non abbinati con certezza ai giocatori di Serie A della fonte dati: senza abbinamento non hanno titolarità né voti stimati. L'abbinamento automatico riparte da solo a ogni aggiornamento giornaliero dei giocatori.</p>
+      {rematchMsg && <p className="mb-3 text-xs text-accent">{rematchMsg}</p>}
       {q.isLoading ? <Spinner /> : !q.data?.length ? <Empty>Tutti i giocatori sono abbinati.</Empty> : (
         <ul className="flex flex-col divide-y divide-line">
           {q.data.map((r) => {

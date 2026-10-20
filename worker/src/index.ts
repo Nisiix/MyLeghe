@@ -2,6 +2,7 @@
 // Nessun accesso a LegheFC o a fantacalcio.it.
 
 import { Hono } from "hono";
+import { kvSet } from "./schedule";
 import type { AppEnv } from "./auth";
 import type { Env } from "./env";
 import { league } from "./league";
@@ -50,7 +51,14 @@ export default {
   fetch: app.fetch,
   async scheduled(_event: ScheduledController, env: Env, ctx: ExecutionContext) {
     ctx.waitUntil((async () => {
-      try { await runSync(env); } catch (e) { console.error("sync", (e as Error).message); }
+      // Esito dell'ultima sincronizzazione, visibile all'admin nella pagina di gestione (stato della fonte dati).
+      try {
+        const r = await runSync(env);
+        await kvSet(env, "sync:last", { ok: true, ...r });
+      } catch (e) {
+        console.error("sync", (e as Error).message);
+        await kvSet(env, "sync:last", { ok: false, error: (e as Error).message }).catch(() => {});
+      }
       try { await runNotifications(env); } catch (e) { console.error("notifiche", (e as Error).message); }
     })());
   },

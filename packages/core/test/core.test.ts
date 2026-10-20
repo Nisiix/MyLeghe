@@ -127,6 +127,23 @@ describe("titolarità e formazione consigliata", () => {
   });
 });
 
+describe("formazione consigliata senza dati della fonte", () => {
+  it("a parità di stima sceglie per costo d'asta", () => {
+    const roster: RosterEntry[] = [
+      { id: "p1", name: "P1", role: 1, cost: 1 }, { id: "p2", name: "P2", role: 1, cost: 20 },
+      ...[1, 2, 3, 4, 5, 6].map((i) => ({ id: `d${i}`, name: `D${i}`, role: 2 as const, cost: i })),
+      ...[1, 2, 3, 4, 5, 6].map((i) => ({ id: `c${i}`, name: `C${i}`, role: 3 as const, cost: 10 - i })),
+      ...[1, 2, 3, 4].map((i) => ({ id: `a${i}`, name: `A${i}`, role: 4 as const, cost: i * 30 })),
+    ];
+    const s = suggestLineup(scorePlayers(roster, new Map(), cfg), cfg)!;
+    expect(s.starters[0].id).toBe("p2");
+    expect(s.starters.map((p) => p.id)).toContain("a4");
+    expect(s.starters.map((p) => p.id)).not.toContain("d1");
+    expect(s.captain).toBe("a4");
+    expect(s.bench[0].id).toBe("p1");
+  });
+});
+
 describe("calcolo live", () => {
   const ev = (o: Partial<Parameters<typeof playerLiveScore>[2] & object>) => ({
     minutes: 90, goals: 0, assists: 0, yellow: 0, red: 0, penaltyScored: 0, penaltyMissed: 0, penaltySaved: 0, ownGoals: 0, goalsConceded: 0, ...o,

@@ -20,6 +20,8 @@ export function Access() {
   const saved = useLeagues();
   const [access, setAccess] = useState<LeagueAccess | null>(null);
   const [mode, setMode] = useState<"choose" | "join" | "create">(params.has("crea") ? "create" : params.has("nuova") ? "join" : "choose");
+  // Arrivo dal salvataggio del regolamento: si spiega il passo successivo (profilo e rosa da collegare).
+  const afterSettings = params.has("rosa");
 
   // Profilo collegato ma senza squadra (prima volta o dopo lo scollegamento): elenco delle squadre.
   // Non durante la creazione di una lega: la scheda con i codici deve restare visibile.
@@ -38,9 +40,9 @@ export function Access() {
         <p className="mt-2 text-sm text-muted">La tua lega, la tua formazione, il live della giornata.</p>
       </div>
       {s && mode !== "create" && !s.userId ? (
-        <ProfileLogin leagueName={s.league.name} admin={s.admin} notice={s.notice ?? null} />
+        <ProfileLogin leagueName={s.league.name} admin={s.admin} notice={s.notice ?? (afterSettings ? "Impostazioni salvate. Ora entra con il tuo profilo, o crealo, per collegare la tua rosa." : null)} />
       ) : s && teams ? (
-        <ChooseTeam teams={teams} admin={s.admin} />
+        <ChooseTeam teams={teams} admin={s.admin} notice={afterSettings ? "Impostazioni salvate. Scegli la rosa da collegare al tuo profilo." : null} />
       ) : s && pending.error ? (
         <ErrorBox error={pending.error} onRetry={() => pending.refetch()} />
       ) : mode === "create" ? (
@@ -201,7 +203,7 @@ function ProfileLogin({ leagueName, admin, notice }: { leagueName: string; admin
 }
 
 /** Collegamento della squadra della rosa al profilo: si sceglie una sola volta (poi si può scollegare dalle impostazioni). */
-function ChooseTeam({ teams, admin }: { teams: AccessTeam[]; admin: boolean }) {
+function ChooseTeam({ teams, admin, notice }: { teams: AccessTeam[]; admin: boolean; notice?: string | null }) {
   const navigate = useNavigate();
   const qc = useQueryClient();
   const [error, setError] = useState<unknown>(null);
@@ -216,6 +218,7 @@ function ChooseTeam({ teams, admin }: { teams: AccessTeam[]; admin: boolean }) {
     <div className="flex flex-col gap-3">
       <h2 className="scoreboard text-2xl">Qual è la tua squadra?</h2>
       <p className="-mt-2 text-sm text-muted">Collega al tuo profilo la squadra della rosa: da ora in poi entrerai direttamente con questa.</p>
+      {notice && <div role="alert" className="rounded-xl border border-card bg-card/25 p-3 text-sm">{notice}</div>}
       {teams.length === 0 && (
         <p className="rounded-xl border border-line bg-surface p-3 text-sm text-muted">
           Nessuna squadra disponibile: {admin ? <>importa le rose dalla <Link to="/admin" className="underline">gestione della lega</Link>.</> : "l'admin deve ancora importare le rose."}

@@ -1,9 +1,11 @@
 // Lega, squadre, rose importate e formazioni (salvate solo in FootballLite).
 
-import { matchPlayer, normalizeConfig, validateLineup, type CalendarDay, type CandidatePlayer, type ImportedTeam, type LeagueConfig, type Role } from "@footballlite/core";
+import { normalizeConfig, validateLineup, type CalendarDay, type ImportedTeam, type LeagueConfig, type Role } from "@footballlite/core";
 import { Hono, type Context } from "hono";
 import { hashPassword, MIN_PASSWORD, newCode, normalizeCode, requireAdmin, requireSession, sha256, signSession, USERNAME_RE, verifyPassword, type AppEnv, type SessionClaims } from "./auth";
+import { bestOf, playerPool, rematchUnmatched } from "./matching";
 import { kvRead, kvSet } from "./schedule";
+import { BSD_DAILY_BUDGET, quotaUsed } from "./sources";
 import { SOURCE_TERMS, sourcesAccepted } from "./terms";
 import { calibrateLeague, type CalibrationResult } from "./calibration";
 import { activeRound } from "./schedule";
@@ -203,23 +205,6 @@ league.delete("/league/admin/users/:id", async (c) => {
   return c.json({ reset: (r.meta.changes ?? 0) > 0 });
 });
 
-/** Pool dei giocatori di Serie A per l'abbinamento (dalla fonte dati, salvati in `players`). */
-async function playerPool(db: D1Database): Promise<CandidatePlayer[]> {
-  const rows = await db.prepare("SELECT id, name, short_name, role, team_name FROM players").all<{ id: number; name: string; short_name: string | null; role: Role | null; team_name: string | null }>();
-  return (rows.results ?? []).flatMap((p) => {
-    const base = { id: p.id, role: p.role, teamName: p.team_name ?? undefined };
-    return p.short_name && p.short_name !== p.name ? [{ ...base, name: p.name }, { ...base, name: p.short_name }] : [{ ...base, name: p.name }];
-  });
-}
-
-function bestOf(name: string, role: Role, pool: CandidatePlayer[]) {
-  const m = matchPlayer(name, role, pool);
-  // Lo stesso giocatore può comparire due volte nel pool (nome e nome breve): candidati unici.
-  const seen = new Set<number>();
-  const candidates = m.candidates.filter((x) => !seen.has(x.id) && seen.add(x.id)).slice(0, 4);
-  return { ...m, candidates };
-}
-
 /**
  * Import delle rose già lette dal file sul dispositivo dell'admin.
  * Sostituisce squadre e rose della lega; restituisce i codici squadra (mostrati una sola volta).
@@ -261,16 +246,28 @@ league.post("/league/admin/import", async (c) => {
 /** Rifà l'abbinamento automatico dei giocatori non abbinati (es. dopo l'aggiornamento delle rose di Serie A). */
 league.post("/league/admin/rematch", async (c) => {
   const s = c.get("session");
-  const pool = await playerPool(c.env.DB);
-  if (!pool.length) return c.json({ error: "Giocatori di Serie A non ancora scaricati dalla fonte dati" }, 409);
-  const rows = await c.env.DB.prepare("SELECT r.* FROM roster r JOIN teams t ON t.id = r.team_id WHERE t.league_id = ? AND r.ext_id IS NULL").bind(s.lid).all<RosterRow>();
-  const stmts = (rows.results ?? []).map((r) => {
-    const m = bestOf(r.name, r.role, pool);
-    return c.env.DB.prepare("UPDATE roster SET ext_id = ?, confidence = ?, candidates = ? WHERE team_id = ? AND slot = ?")
-      .bind(m.id, m.confidence, JSON.stringify(m.candidates), r.team_id, r.slot);
+  const pool = await c.env.DB.prepare("SELECT COUNT(*) AS n FROM players").first<{ n: number }>();
+  if (!pool?.n) return c.json({ error: "Giocatori di Serie A non ancora scaricati dalla fonte dati: la sincronizzazione parte dopo l'accettazione dei termini delle fonti e aggiorna i giocatori una volta al giorno." }, 409);
+  return c.json(await rematchUnmatched(c.env.DB, s.lid));
+});
+
+/** Stato della fonte dati per l'admin: giocatori scaricati, ultima sincronizzazione, budget del giorno, giocatori della lega non abbinati. */
+league.get("/league/admin/sources", async (c) => {
+  const s = c.get("session");
+  const pool = await c.env.DB.prepare("SELECT COUNT(*) AS n, MAX(updated_at) AS at FROM players").first<{ n: number; at: number | null }>();
+  const unmatched = await c.env.DB.prepare("SELECT COUNT(*) AS n FROM roster r JOIN teams t ON t.id = r.team_id WHERE t.league_id = ? AND r.ext_id IS NULL").bind(s.lid).first<{ n: number }>();
+  const total = await c.env.DB.prepare("SELECT COUNT(*) AS n FROM roster r JOIN teams t ON t.id = r.team_id WHERE t.league_id = ?").bind(s.lid).first<{ n: number }>();
+  const last = await kvRead<{ ok: boolean; error?: string; used?: number; calls?: number; skipped?: string }>(c.env, "sync:last");
+  return c.json({
+    accepted: await sourcesAccepted(c.env),
+    poolSize: pool?.n ?? 0,
+    playersUpdatedAt: pool?.at ?? null,
+    bsdUsedToday: await quotaUsed(c.env),
+    bsdBudget: BSD_DAILY_BUDGET,
+    lastSync: last ? { at: last.updatedAt, ...last.value } : null,
+    unmatched: unmatched?.n ?? 0,
+    rosterSize: total?.n ?? 0,
   });
-  if (stmts.length) await c.env.DB.batch(stmts);
-  return c.json({ checked: stmts.length });
 });
 
 league.get("/league/admin/unmatched", async (c) => {
