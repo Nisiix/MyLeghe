@@ -63,22 +63,44 @@ const ROLE_KITS: Record<number, Kit> = {
   4: { primary: "#e0322e", secondary: "#ffffff", pattern: "solid" },
 };
 
-export const SKIN = ["#f6d3b5", "#eebf9b", "#d9a070", "#b97a4b", "#8a5431", "#5c3620"];
-export const HAIR = ["#1b1b1b", "#3b2518", "#6b4423", "#a56a2d", "#d9a441", "#c7532a", "#8c6a4a"];
-export type HairStyle = "short" | "buzz" | "curly" | "long" | "spiky" | "mohawk" | "bald" | "bun" | "afro" | "fringe";
-export type Beard = "none" | "stubble" | "goatee" | "full";
+/** Carnagioni: tinta base e ombra. */
+export const SKIN: { base: string; shade: string; lip: string }[] = [
+  { base: "#f7dcc4", shade: "#dfb897", lip: "#d58a7e" },
+  { base: "#f0c9a6", shade: "#d5a37c", lip: "#c97c6c" },
+  { base: "#dba77c", shade: "#b9834f", lip: "#b56b5a" },
+  { base: "#c0885a", shade: "#9a6538", lip: "#9e5a48" },
+  { base: "#8e5a36", shade: "#6c3f22", lip: "#7a4537" },
+  { base: "#5e3a22", shade: "#3f2514", lip: "#59331f" },
+];
+export const HAIR: { base: string; light: string }[] = [
+  { base: "#15120f", light: "#2d2824" },
+  { base: "#2e1d12", light: "#4a3222" },
+  { base: "#5a3a22", light: "#7a5437" },
+  { base: "#8a5a2b", light: "#a8763f" },
+  { base: "#c99a4a", light: "#e0b96a" },
+  { base: "#b4502a", light: "#d06f3f" },
+  { base: "#3a3a3a", light: "#5c5c5c" },
+];
+export const EYES = ["#3b2314", "#5a3a1e", "#6e5a3a", "#3f6b4a", "#3b6ea8", "#6a7f91"];
+
+export type HairStyle = "short" | "fade" | "slick" | "curtains" | "curly" | "long" | "spiky" | "mohawk" | "bald" | "bun" | "afro" | "dreads" | "receding";
+export type Beard = "none" | "stubble" | "goatee" | "full" | "mustache";
 export type Mouth = "smile" | "grin" | "neutral" | "open";
 export type Brows = "flat" | "angry" | "raised";
+export type Jaw = "oval" | "round" | "square" | "long";
 
 export interface Look {
-  skin: string;
-  hair: string;
+  skin: { base: string; shade: string; lip: string };
+  hair: { base: string; light: string };
+  eye: string;
   hairStyle: HairStyle;
   beard: Beard;
   mouth: Mouth;
   brows: Brows;
+  jaw: Jaw;
   headband: boolean;
-  wide: boolean;
+  thickBrows: boolean;
+  bigNose: boolean;
   kit: Kit;
 }
 
@@ -105,19 +127,24 @@ export function kitFor(role: number, team?: string | null): Kit {
 
 export function lookFor(name: string, role: number, team?: string | null): Look {
   const seed = hash(name.trim().toLowerCase());
-  const styles: HairStyle[] = ["short", "short", "short", "buzz", "curly", "long", "spiky", "mohawk", "bald", "bun", "afro", "fringe"];
-  const beards: Beard[] = ["none", "none", "none", "stubble", "stubble", "goatee", "full"];
-  const mouths: Mouth[] = ["smile", "smile", "grin", "neutral", "open"];
+  const styles: HairStyle[] = ["short", "short", "fade", "fade", "slick", "curtains", "curly", "long", "spiky", "mohawk", "bald", "bun", "afro", "dreads", "receding"];
+  const beards: Beard[] = ["none", "none", "none", "stubble", "stubble", "stubble", "goatee", "full", "mustache"];
+  const mouths: Mouth[] = ["smile", "smile", "grin", "neutral", "neutral", "open"];
   const brows: Brows[] = ["flat", "flat", "angry", "raised"];
+  const jaws: Jaw[] = ["oval", "oval", "round", "square", "long"];
+  const hair = pick(HAIR, seed, 2);
   return {
     skin: pick(SKIN, seed, 1),
-    hair: pick(HAIR, seed, 2),
+    hair,
+    eye: pick(EYES, seed, 10),
     hairStyle: pick(styles, seed, 3),
     beard: pick(beards, seed, 4),
     mouth: pick(mouths, seed, 5),
     brows: pick(brows, seed, 6),
-    headband: rnd(seed, 7) < 0.1,
-    wide: rnd(seed, 8) < 0.35,
+    jaw: pick(jaws, seed, 11),
+    headband: rnd(seed, 7) < 0.08,
+    thickBrows: rnd(seed, 12) < 0.4,
+    bigNose: rnd(seed, 13) < 0.3,
     kit: role === 1 ? GK_KITS[Math.floor(rnd(seed, 9) * GK_KITS.length)] : kitFor(role, team),
   };
 }

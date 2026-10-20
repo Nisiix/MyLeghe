@@ -779,7 +779,6 @@ function Editor({ teamId, proxyName, round, deadline, started, liveLabel, scored
                     </div>
                     <StarterPercent percent={p.starterPercent} />
                   </button>
-                  <a href={newsSearchUrl(p.info.ext_name ?? p.name)} target="_blank" rel="noreferrer" className="shrink-0 px-1 text-xs text-accent underline">News</a>
                 </li>
               ))}
             </ul>
