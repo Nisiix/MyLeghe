@@ -36,7 +36,7 @@ export function Access() {
   return (
     <div className="mx-auto flex min-h-full max-w-sm flex-col justify-center px-6 py-10">
       <div className="hero -mx-6 -mt-10 mb-8 rounded-b-[2rem] px-6 pt-12 pb-8 text-white">
-        <img src="/icon.svg" alt="" className="mb-4 size-16 rounded-2xl bg-white/10 p-1" />
+        <img src="/icon.svg" alt="" className="mb-4 size-16 rounded-2xl shadow-lg" />
         <h1 className="text-4xl font-extrabold leading-none">FootballLite</h1>
         <p className="mt-2 text-sm text-white/75">La tua lega, la tua formazione, il live della giornata.</p>
       </div>
