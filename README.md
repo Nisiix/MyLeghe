@@ -2,7 +2,7 @@
 
 App (PWA, anche come APK Android) per seguire la propria lega di fantacalcio. Rose, calendario e regolamento li inserisce l'admin della lega; i dati di Serie A arrivano da fonti con licenza.
 
-**Landing page, video e APK:** [nisiix.github.io/MyLeghe](https://nisiix.github.io/MyLeghe)
+**Landing page e APK:** [nisiix.github.io/MyLeghe](https://nisiix.github.io/MyLeghe)
 
 - **Accesso senza account.** Si entra con il codice invito della lega e si sceglie il proprio utente. Sullo stesso dispositivo si possono avere più leghe; chi crea una lega ne diventa admin.
 - **Dashboard.** Tabellone della giornata con la tua partita (avversario dal calendario), il conto alla rovescia al primo calcio d'inizio e il pulsante «Inserisci formazione», che a giornata iniziata diventa «Visualizza live». Sotto: le partite della giornata di lega, i giocatori a rischio, le partite di Serie A.
@@ -36,7 +36,7 @@ Chi gestisce l'installazione accetta i termini delle fonti dati (pagina Admin, c
 | `packages/core` | Logica in TypeScript, con test: regolamento, import di rose e calendario, abbinamento dei nomi, titolarità, formazione consigliata, calcolo live e simulazione, voto statistico, notifiche |
 | `worker` | Backend Cloudflare Worker (Hono) con database D1: leghe e codici, rose, calendario, formazioni con storico, sincronizzazione delle fonti, notifiche Web Push |
 | `web` | PWA React + Vite + Tailwind, servita dallo stesso Worker |
-| `site` | Landing page (GitHub Pages) con video e APK |
+| `site` | Landing page (GitHub Pages) con l'APK |
 | `video` | Video tutorial realizzato con [HyperFrames](https://github.com/heygen-com/hyperframes) |
 | `android` | Configurazione dell'app Android (Trusted Web Activity, [Bubblewrap](https://github.com/GoogleChromeLabs/bubblewrap)) |
 

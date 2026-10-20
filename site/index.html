@@ -42,7 +42,6 @@
 
       .card-btn { display: inline-block; background: var(--cartellino); color: var(--inchiostro); font-weight: 800; padding: 14px 22px; border-radius: 12px; text-decoration: none; box-shadow: 4px 4px 0 var(--inchiostro); transform: rotate(-1.5deg); transition: transform 0.15s; }
       .card-btn:hover { transform: rotate(0deg); }
-      .ghost-btn { display: inline-block; font-weight: 700; padding: 13px 20px; border-radius: 12px; border: 2px solid var(--inchiostro); text-decoration: none; }
 
       /* Hero: a sinistra il titolo, a destra il campo con le percentuali */
       .hero { display: grid; grid-template-columns: 1.05fr 1fr; gap: 48px; align-items: center; padding: 40px 0 72px; }
@@ -63,9 +62,6 @@
       section.block { padding: 72px 0; border-top: 2px solid var(--linea); }
       section.block h2 { font-size: clamp(40px, 6vw, 68px); margin-bottom: 18px; }
       section.block .intro { max-width: 40em; color: #24382f; font-size: 18px; margin-bottom: 32px; }
-
-      .video { background: var(--erba-scura); border-radius: 20px; padding: clamp(10px, 2vw, 18px); }
-      .video video { display: block; width: 100%; border-radius: 12px; background: #000; aspect-ratio: 16 / 9; }
 
       .features { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 48px; }
       .feature { padding: 22px 0; border-top: 1px solid var(--linea); }
@@ -91,7 +87,6 @@
         .pitch { max-width: 420px; }
         .features, .sources { grid-template-columns: 1fr; }
         ol.steps { grid-template-columns: 1fr; }
-        nav a.hide-sm { display: none; }
       }
       @media (prefers-reduced-motion: reduce) {
         html { scroll-behavior: auto; }
@@ -104,9 +99,7 @@
       <header class="top">
         <a class="brand display" href="#"><img src="assets/icon.svg" alt="" />FootballLite</a>
         <nav aria-label="Principale">
-          <a class="hide-sm" href="#video">Video</a>
-          <a class="hide-sm" href="#installa">Installa</a>
-          <a href="https://footballlite.footballlite-app.workers.dev" id="app-link-top">Apri l'app</a>
+          <a href="#installa">Installa</a>
         </nav>
       </header>
 
@@ -116,8 +109,7 @@
             <h1 id="titolo" class="display">La formazione giusta, prima del fischio.</h1>
             <p class="lead">FootballLite è un'app gratuita per la tua lega di fantacalcio. Vedi la titolarità stimata di ogni giocatore, schiera con la formazione consigliata e segui il live della giornata con il regolamento della tua lega.</p>
             <div class="ctas">
-              <a class="card-btn" href="https://footballlite.footballlite-app.workers.dev" id="app-link">Apri l'app</a>
-              <a class="ghost-btn" href="download/FootballLite.apk" download>Scarica l'APK per Android</a>
+              <a class="card-btn" href="download/FootballLite.apk" download>Scarica l'APK per Android</a>
             </div>
           </div>
           <div class="pitch" role="img" aria-label="Esempio di formazione con la percentuale di titolarità sotto ogni giocatore">
@@ -125,17 +117,6 @@
             <div class="prow"><div class="pl"><span class="av">GT</span><span class="pct hi">90%</span></div><div class="pl"><span class="av">LP</span><span class="pct hi">85%</span></div><div class="pl"><span class="av">SR</span><span class="pct mid">60%</span></div><div class="pl"><span class="av">TS</span><span class="pct hi">80%</span></div></div>
             <div class="prow"><div class="pl"><span class="av">BN</span><span class="pct hi">90%</span></div><div class="pl"><span class="av">FR</span><span class="pct mid">55%</span></div><div class="pl"><span class="av">DM</span><span class="pct lo">20%</span></div></div>
             <div class="prow"><div class="pl"><span class="av">VL</span><span class="pct hi">90%</span></div></div>
-          </div>
-        </section>
-
-        <section class="block" id="video" aria-labelledby="video-t">
-          <h2 id="video-t" class="display">Come funziona, in 70 secondi</h2>
-          <p class="intro">Dall'ingresso nella lega con il codice invito fino alla simulazione del risultato. Squadre e giocatori del video sono inventati.</p>
-          <div class="video">
-            <video controls preload="metadata" playsinline poster="assets/video-poster.jpg">
-              <source src="assets/footballlite-tutorial.mp4" type="video/mp4" />
-              Il tuo browser non riproduce il video: <a href="assets/footballlite-tutorial.mp4">scaricalo qui</a>.
-            </video>
           </div>
         </section>
 
