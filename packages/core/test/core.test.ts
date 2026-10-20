@@ -36,7 +36,7 @@ describe("import rose", () => {
 
   it("legge squadre, costi e ruoli secondo lo schema 3-8-8-6", () => {
     const r = parseRosterGrid(grid, [3, 8, 8, 6]);
-    expect(r.teams.map((t) => t.name)).toEqual(["Squadra Uno", "Squadra Due", "Vuota"]);
+    expect(r.teams.map((t) => t.name)).toEqual(["Squadra Uno", "Squadra Due"]);
     const t = r.teams[0];
     expect(t.players).toHaveLength(25);
     expect(t.spent).toBe(325);
@@ -44,13 +44,12 @@ describe("import rose", () => {
     expect(t.players[3].role).toBe(2);
     expect(t.players[11].role).toBe(3);
     expect(t.players[19].role).toBe(4);
-    expect(r.teams[2].players).toHaveLength(0);
-    expect(r.warnings).toEqual([]);
+    expect(r.warnings).toEqual(["Ignorate perché senza giocatori: Vuota."]);
   });
 
   it("segnala rose con un numero di giocatori diverso dallo schema", () => {
     const r = parseRosterGrid(grid, [3, 8, 8, 5]);
-    expect(r.warnings.length).toBe(2);
+    expect(r.warnings.filter((w) => w.includes("invece di 24"))).toHaveLength(2);
   });
 
   it("legge CSV con punto e virgola e virgolette", () => {

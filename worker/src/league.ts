@@ -149,8 +149,10 @@ function bestOf(name: string, role: Role, pool: CandidatePlayer[]) {
  */
 league.post("/league/admin/import", async (c) => {
   const s = c.get("session");
-  const { teams } = await c.req.json<{ teams: ImportedTeam[] }>();
-  if (!Array.isArray(teams) || !teams.length) return c.json({ error: "Nessuna squadra da importare" }, 400);
+  const body = await c.req.json<{ teams: ImportedTeam[] }>();
+  // Le squadre senza giocatori importabili non vengono create.
+  const teams = Array.isArray(body.teams) ? body.teams.filter((t) => Array.isArray(t.players) && t.players.length > 0) : [];
+  if (!teams.length) return c.json({ error: "Nessuna squadra con giocatori da importare" }, 400);
   const pool = await playerPool(c.env.DB);
   const db = c.env.DB;
   const existing = await db.prepare("SELECT id, name FROM teams WHERE league_id = ?").bind(s.lid).all<{ id: number; name: string }>();

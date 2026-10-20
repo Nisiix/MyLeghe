@@ -43,6 +43,7 @@ export function parseRosterGrid(grid: Cell[][], scheme: LeagueConfig["rosterSche
   const header = grid[0] ?? [];
   const teams: ImportedTeam[] = [];
   const expected = scheme.reduce((a, b) => a + b, 0);
+  const empty: string[] = [];
 
   for (let col = 0; col < header.length; col++) {
     const name = text(header[col]);
@@ -60,13 +61,19 @@ export function parseRosterGrid(grid: Cell[][], scheme: LeagueConfig["rosterSche
       const cost = Number(grid[row]?.[col + 1]) || 0;
       players.push({ name: pname, cost, role: roleForIndex(players.length, scheme) });
     }
-    if (players.length && players.length !== expected) {
+    // Squadre senza giocatori importabili (colonne vuote del file): ignorate.
+    if (!players.length) {
+      empty.push(name);
+      continue;
+    }
+    if (players.length !== expected) {
       warnings.push(`${name}: ${players.length} giocatori invece di ${expected}: controlla i ruoli assegnati.`);
     }
     if (!spent) spent = players.reduce((a, p) => a + p.cost, 0);
     teams.push({ name, players, spent });
   }
-  if (!teams.length) warnings.push("Nessuna squadra trovata: la prima riga deve contenere i nomi delle squadre seguiti da una colonna \"costo\".");
+  if (empty.length) warnings.push(`Ignorate perché senza giocatori: ${empty.join(", ")}.`);
+  if (!teams.length && !empty.length) warnings.push("Nessuna squadra trovata: la prima riga deve contenere i nomi delle squadre seguiti da una colonna \"costo\".");
   return { teams, warnings };
 }
 
