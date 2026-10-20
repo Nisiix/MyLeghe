@@ -4,7 +4,8 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=1920, height=1080" />
     <title>FootballLite – tutorial</title>
-    <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
+    <!-- GSAP 3.14.2 in locale (assets/GSAP-LICENSE.md): nessuna richiesta di rete durante il render -->
+    <script src="assets/gsap.min.js"></script>
     <style>
       /* Archivo: SIL Open Font License 1.1 (assets/fonts/OFL.txt) */
       @font-face {
@@ -108,7 +109,7 @@
     </style>
   </head>
   <body>
-    <div id="root" data-composition-id="main" data-start="0" data-duration="70" data-width="1920" data-height="1080">
+    <div id="root" data-composition-id="main" data-start="0" data-duration="79" data-width="1920" data-height="1080">
       <div id="bg"><div class="pitch"></div><div class="line"></div><div class="circle"></div></div>
 
       <!-- 1. Intro -->
@@ -126,17 +127,23 @@
         <div class="scene" id="s2-in">
           <div class="caption">
             <span class="step">1. Entra</span>
-            <h2>Un codice, poi scegli chi sei</h2>
-            <p>L'admin ti manda il codice invito della lega. Lo inserisci e scegli la tua squadra: niente account né password.</p>
+            <h2>Un codice, poi il tuo profilo</h2>
+            <p>L'admin ti manda il codice invito della lega. Entri con username e password e, solo la prima volta, colleghi la tua squadra.</p>
           </div>
           <div class="phone"><div class="screen"><div class="notch"></div>
             <div class="content" style="padding-top: 70px">
               <div style="font-size: 44px; font-weight: 900; font-stretch: 62%">FootballLite</div>
               <div style="font-size: 14px; font-weight: 700">Codice invito della lega</div>
               <div class="codebox" id="s2-code">K7PQ2MXR</div>
+              <div id="s2-login" style="display: flex; flex-direction: column; gap: 8px">
+                <div style="font-size: 14px; font-weight: 700">Username</div>
+                <div class="codebox" style="letter-spacing: 0; font-size: 18px; padding: 10px 14px">sporting.divano</div>
+                <div style="font-size: 14px; font-weight: 700">Password</div>
+                <div class="codebox" style="font-size: 18px; padding: 10px 14px">••••••••</div>
+              </div>
               <span class="yellow" style="text-align: center">Entra</span>
-              <div id="s2-users" style="display: flex; flex-direction: column; gap: 8px; margin-top: 10px">
-                <div style="font-size: 26px; font-weight: 800; font-stretch: 68%">Chi sei?</div>
+              <div id="s2-users" style="display: flex; flex-direction: column; gap: 8px; margin-top: 4px">
+                <div style="font-size: 24px; font-weight: 800; font-stretch: 68%">Qual è la tua squadra?</div>
                 <div class="user"><span class="badge" style="background: #7dd3a8">LO</span>Longobarda</div>
                 <div class="user sel" id="s2-me"><span class="badge" style="background: #ffc928">SD</span>Sporting Divano</div>
                 <div class="user"><span class="badge" style="background: #8ec5ff">DS</span>Dinamo Spritz</div>
@@ -193,8 +200,8 @@
                   <div class="pl"><div class="pin"><span class="av">RV</span><span class="pct hi">90%</span><span class="nm">Rovelli</span></div></div>
                   <div class="pl"><div class="pin"><span class="cap">C</span><span class="av">MS</span><span class="pct hi">85%</span><span class="nm">Moscato</span></div></div>
                   <div class="pl">
-                    <div class="pin" id="s4-old"><span class="av">CL</span><span class="pct lo">0%</span><span class="nm">Colombi</span></div>
-                    <div class="pin" id="s4-new"><span class="av">BR</span><span class="pct hi">80%</span><span class="nm">Brambati</span></div>
+                    <div class="pin" id="s4-old" data-layout-allow-overlap data-layout-allow-occlusion><span class="av">CL</span><span class="pct lo">0%</span><span class="nm">Colombi</span></div>
+                    <div class="pin" id="s4-new" data-layout-allow-overlap data-layout-allow-occlusion><span class="av">BR</span><span class="pct hi">80%</span><span class="nm">Brambati</span></div>
                   </div>
                 </div>
                 <div class="prow">
@@ -217,8 +224,47 @@
         </div>
       </section>
 
+      <!-- 4b. Incolla la formazione -->
+      <section id="s4b" class="clip" data-start="38" data-duration="9" data-track-index="1">
+        <div class="scene" id="s4b-in">
+          <div class="caption">
+            <span class="step">3. Formazione</span>
+            <h2>Incolla e via</h2>
+            <p>Hai la formazione in un messaggio? Premi «Incolla»: FootballLite riconosce modulo, titolari, panchina e capitano dai nomi e dai ruoli. Poi controlli e salvi.</p>
+          </div>
+          <div class="phone"><div class="screen"><div class="notch"></div>
+            <div class="content" style="padding-top: 56px">
+              <div class="row"><div style="font-size: 30px; font-weight: 800; font-stretch: 68%">La tua formazione</div><span class="mod on" id="s4b-btn">Incolla</span></div>
+              <div class="card" id="s4b-sheet"><h4>Incolla la formazione</h4>
+                <pre id="s4b-text" style="font-family: 'Archivo', sans-serif; font-size: 13px; line-height: 1.35; color: var(--inchiostro); background: var(--gesso); border: 1px solid var(--linea); border-radius: 10px; padding: 10px; height: 372px; overflow: hidden; white-space: pre">Sporting Divano (3-4-3)
+By Mario
+
+Rovelli
+Bonetti
+Ferretti
+Damiani
+Gatti
+Lupi
+Serafini (C)
+Tosi
+Valli
+Moscato
+Brambati
+----------------------
+Marini
+Conti
+Fabbri
+Greco</pre>
+                <span class="yellow" style="display: block; text-align: center; margin-top: 10px" id="s4b-apply">Applica</span>
+              </div>
+            </div>
+            <div class="toast" id="s4b-toast">Formazione incollata: 3-4-3, 11 titolari, 4 in panchina. Controlla e salva.</div>
+          </div></div>
+        </div>
+      </section>
+
       <!-- 5. Live e simulazione -->
-      <section id="s5" class="clip" data-start="38" data-duration="13" data-track-index="1">
+      <section id="s5" class="clip" data-start="47" data-duration="13" data-track-index="1">
         <div class="scene" id="s5-in">
           <div class="caption">
             <span class="step">4. Live</span>
@@ -232,8 +278,8 @@
                 <div class="row" style="margin-top: 10px; text-align: center">
                   <b style="font-size: 14px; width: 120px">Sporting Divano</b>
                   <span style="position: relative; width: 110px; height: 46px">
-                    <span class="big" id="s5-partial" style="position: absolute; inset: 0">1-0</span>
-                    <span class="big" id="s5-final" style="position: absolute; inset: 0">2-1</span>
+                    <span class="big" id="s5-partial" data-layout-allow-overlap data-layout-allow-occlusion style="position: absolute; inset: 0">1-0</span>
+                    <span class="big" id="s5-final" data-layout-allow-overlap data-layout-allow-occlusion style="position: absolute; inset: 0">2-1</span>
                   </span>
                   <b style="font-size: 14px; width: 120px">Dinamo Spritz</b>
                 </div>
@@ -257,7 +303,7 @@
       </section>
 
       <!-- 6. Admin -->
-      <section id="s6" class="clip" data-start="51" data-duration="8" data-track-index="1">
+      <section id="s6" class="clip" data-start="60" data-duration="8" data-track-index="1">
         <div class="scene" id="s6-in">
           <div class="caption">
             <span class="step">5. Crea la tua lega</span>
@@ -280,7 +326,7 @@
       </section>
 
       <!-- 7. Notifiche -->
-      <section id="s7" class="clip" data-start="59" data-duration="6" data-track-index="1">
+      <section id="s7" class="clip" data-start="68" data-duration="6" data-track-index="1">
         <div class="scene" id="s7-in">
           <div class="caption">
             <span class="step">6. Notifiche</span>
@@ -299,7 +345,7 @@
       </section>
 
       <!-- 8. Chiusura -->
-      <section id="s8" class="clip" data-start="65" data-duration="5" data-track-index="1">
+      <section id="s8" class="clip" data-start="74" data-duration="5" data-track-index="1">
         <div class="scene">
           <div class="title-wrap" id="s8-in">
             <span class="word">FootballLite</span>
@@ -328,8 +374,9 @@
         // 2. Accesso
         enter("#s2-in", 6.1);
         tl.fromTo("#s2-code", { clipPath: "inset(0 100% 0 0)" }, { clipPath: "inset(0 0% 0 0)", duration: 1.2, ease: "none" }, 7.0);
-        tl.fromTo("#s2-users", { opacity: 0, y: 20 }, { opacity: 1, y: 0, duration: 0.6, ease: E }, 9.0);
-        press("#s2-me", 11.5);
+        tl.fromTo("#s2-login", { opacity: 0, y: 20 }, { opacity: 1, y: 0, duration: 0.6, ease: E }, 8.4);
+        tl.fromTo("#s2-users", { opacity: 0, y: 20 }, { opacity: 1, y: 0, duration: 0.6, ease: E }, 10.0);
+        press("#s2-me", 12.5);
         leave("#s2-in", 14.4);
 
         // 3. Dashboard
@@ -349,28 +396,38 @@
         tl.to("#s4-toast", { opacity: 1, y: 0, duration: 0.5, ease: E }, 31.8);
         leave("#s4-in", 37.4);
 
+        // 4b. Incolla: il testo compare, «Applica», poi la conferma
+        enter("#s4b-in", 38.1);
+        tl.fromTo("#s4b-toast", { opacity: 0, y: 20 }, { opacity: 0, y: 20, duration: 0.01 }, 38.0);
+        press("#s4b-btn", 39.2);
+        tl.fromTo("#s4b-sheet", { opacity: 0, y: 30 }, { opacity: 1, y: 0, duration: 0.5, ease: E }, 39.5);
+        tl.fromTo("#s4b-text", { clipPath: "inset(0 0 100% 0)" }, { clipPath: "inset(0 0 0% 0)", duration: 1.6, ease: "none" }, 40.0);
+        press("#s4b-apply", 42.6);
+        tl.to("#s4b-toast", { opacity: 1, y: 0, duration: 0.5, ease: E }, 43.0);
+        leave("#s4b-in", 46.4);
+
         // 5. Live: parziale, poi simulazione
-        enter("#s5-in", 38.1);
-        tl.fromTo("#s5-final", { opacity: 0, scale: 0.7 }, { opacity: 0, scale: 0.7, duration: 0.01 }, 38.0);
-        tl.fromTo(["#s5-mods", "#s5-others"], { opacity: 0, y: 20 }, { opacity: 0, y: 20, duration: 0.01 }, 38.0);
-        press("#s5-btn", 41.5);
-        tl.fromTo("#s5-partial", { opacity: 1 }, { opacity: 0, duration: 0.3 }, 41.9);
-        tl.to("#s5-final", { opacity: 1, scale: 1, duration: 0.5, ease: "back.out(2)" }, 42.1);
-        tl.to(["#s5-mods", "#s5-others"], { opacity: 1, y: 0, duration: 0.5, stagger: 0.6, ease: E }, 42.6);
-        leave("#s5-in", 50.4);
+        enter("#s5-in", 47.1);
+        tl.fromTo("#s5-final", { opacity: 0, scale: 0.7 }, { opacity: 0, scale: 0.7, duration: 0.01 }, 47.0);
+        tl.fromTo(["#s5-mods", "#s5-others"], { opacity: 0, y: 20 }, { opacity: 0, y: 20, duration: 0.01 }, 47.0);
+        press("#s5-btn", 50.5);
+        tl.fromTo("#s5-partial", { opacity: 1 }, { opacity: 0, duration: 0.3 }, 50.9);
+        tl.to("#s5-final", { opacity: 1, scale: 1, duration: 0.5, ease: "back.out(2)" }, 51.1);
+        tl.to(["#s5-mods", "#s5-others"], { opacity: 1, y: 0, duration: 0.5, stagger: 0.6, ease: E }, 51.6);
+        leave("#s5-in", 59.4);
 
         // 6. Admin
-        enter("#s6-in", 51.1);
-        tl.fromTo(["#s6-r", "#s6-c", "#s6-rules"], { opacity: 0, y: 14 }, { opacity: 1, y: 0, duration: 0.5, stagger: 0.8, ease: E }, 52.2);
-        leave("#s6-in", 58.4);
+        enter("#s6-in", 60.1);
+        tl.fromTo(["#s6-r", "#s6-c", "#s6-rules"], { opacity: 0, y: 14 }, { opacity: 1, y: 0, duration: 0.5, stagger: 0.8, ease: E }, 61.2);
+        leave("#s6-in", 67.4);
 
         // 7. Notifiche
-        enter("#s7-in", 59.1);
-        tl.fromTo(["#s7-n1", "#s7-n2", "#s7-n3"], { opacity: 0, y: -30 }, { opacity: 1, y: 0, duration: 0.5, stagger: 1.0, ease: E }, 59.8);
-        leave("#s7-in", 64.4);
+        enter("#s7-in", 68.1);
+        tl.fromTo(["#s7-n1", "#s7-n2", "#s7-n3"], { opacity: 0, y: -30 }, { opacity: 1, y: 0, duration: 0.5, stagger: 1.0, ease: E }, 68.8);
+        leave("#s7-in", 73.4);
 
         // 8. Chiusura
-        tl.fromTo("#s8-in", { opacity: 0, y: 40 }, { opacity: 1, y: 0, duration: 0.8, ease: E }, 65.2);
+        tl.fromTo("#s8-in", { opacity: 0, y: 40 }, { opacity: 1, y: 0, duration: 0.8, ease: E }, 74.2);
 
         window.__timelines["main"] = tl;
       });

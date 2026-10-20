@@ -33,7 +33,7 @@ export function SettingsPage() {
             <p className="mb-1 text-sm"><b>@{s.username}</b> · {s.myTeamId ? <>squadra <b>{names.get(s.myTeamId) ?? "—"}</b></> : "nessuna squadra collegata"}</p>
             <p className="mb-3 text-xs text-muted">La squadra collegata non si cambia: puoi scollegarla e poi collegare una squadra libera. L'accesso resta memorizzato su questo dispositivo fino al prossimo login da un altro dispositivo.</p>
             <div className="flex flex-wrap gap-2">
-              {s.myTeamId && <Button variant="ghost" onClick={unlink}>Scollega utente da utente rosa</Button>}
+              {s.myTeamId && <Button variant="ghost" onClick={unlink}>Scollega utente da rosa</Button>}
               {!s.myTeamId && <Button variant="ghost" onClick={() => navigate("/accesso")}>Collega una squadra</Button>}
               <Button variant="ghost" onClick={() => { session.leaveProfile(); navigate("/accesso"); }}>Esci dal profilo</Button>
             </div>
