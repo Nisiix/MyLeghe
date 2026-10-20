@@ -2,7 +2,8 @@ import { moduleShape, orderBench, parseLineupText, ROLE_NAME, ROLES, suggestLine
 import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
-import { Button, Card, Empty, ErrorBox, RoleTag, Sheet, Shirt, Spinner, StarterPercent, fmt, formatCountdown, useNow } from "../components/ui";
+import { Button, Card, Empty, ErrorBox, RoleTag, Sheet, Spinner, StarterPercent, fmt, formatCountdown, useNow } from "../components/ui";
+import { Figurine } from "../components/Figurine";
 import { api, ApiError } from "../lib/api";
 import { useLeague, useLineups, useOutlook, useRound, type Lineup, type Outlook, type RosterPlayer } from "../lib/data";
 import { useSession } from "../lib/session";
@@ -504,7 +505,7 @@ function Editor({ teamId, proxyName, round, deadline, started, liveLabel, scored
     <>
       {lead}
       <button {...grab(p.id, () => openSheet(p.id))} className="draggable flex min-w-0 flex-1 cursor-grab items-center gap-3 text-left" aria-label={`${p.name}: tocca per le opzioni, trascina per spostarlo`}>
-        <Shirt name={p.name} role={p.role} size={36} />
+        <Figurine name={p.name} role={p.role} team={p.info.ext_team} size={36} />
         <span className="min-w-0 flex-1">
           <span className="flex items-center gap-1.5 truncate text-[15px] font-bold">
             <RoleTag role={p.role} size={16} />{p.name}
@@ -662,7 +663,7 @@ function Editor({ teamId, proxyName, round, deadline, started, liveLabel, scored
 
       {drag && dragged && (
         <div className="pointer-events-none fixed z-[60] -translate-x-1/2 -translate-y-1/2" style={{ left: drag.x, top: drag.y }} aria-hidden>
-          <Shirt name={dragged.name} role={dragged.role} size={56} />
+          <Figurine name={dragged.name} role={dragged.role} team={dragged.info.ext_team} size={56} />
         </div>
       )}
 
@@ -689,7 +690,7 @@ function Editor({ teamId, proxyName, round, deadline, started, liveLabel, scored
           return (
             <div className="flex flex-col gap-3">
               <div className="flex items-center gap-3">
-                <Shirt name={acting.name} role={acting.role} size={52} />
+                <Figurine name={acting.name} role={acting.role} team={acting.info.ext_team} size={52} />
                 <div className="min-w-0 flex-1 text-sm">
                   <p className="font-semibold">{[SINGULAR[acting.role][0].toUpperCase() + SINGULAR[acting.role].slice(1), prettyTeam(acting.info.ext_team)].filter(Boolean).join(" · ")}</p>
                   <p className="text-xs text-muted">{[statusText(acting.outlook), `FM stimata ${fmt(acting.expectedFantavote, 2)}`].filter(Boolean).join(" · ")}</p>
@@ -711,7 +712,7 @@ function Editor({ teamId, proxyName, round, deadline, started, liveLabel, scored
                     {full.map((x) => (
                       <li key={x.id}>
                         <button onClick={() => (choose === "field" ? toField(acting, x.id) : toBenchSpot(acting, x.id))} className="flex w-full items-center gap-3 rounded-lg px-2 py-1.5 text-left hover:bg-surface-2">
-                          <Shirt name={x.name} role={x.role} size={32} />
+                          <Figurine name={x.name} role={x.role} team={x.info.ext_team} size={32} />
                           <span className="min-w-0 flex-1"><span className="block truncate text-sm font-bold">{x.name}</span><span className="block truncate text-xs text-muted">{choose === "bench" ? `Panchina ${bench.indexOf(x.id) + 1} · ` : ""}{prettyTeam(x.info.ext_team)}</span></span>
                           <StarterPercent percent={x.starterPercent} />
                         </button>
@@ -748,7 +749,7 @@ function Editor({ teamId, proxyName, round, deadline, started, liveLabel, scored
       <Sheet open={!!picking} onClose={() => setPicking(null)} title={replacing ? `Sostituisci ${replacing.name}` : picking?.target === "bench" ? `Posto ${bench.length + 1} in panchina` : `Slot ${picking ? SINGULAR[picking.role] ?? "" : ""}`}>
         {replacing && (
           <div className="mb-3 flex items-center gap-3 rounded-xl border border-line bg-surface-2 p-3">
-            <Shirt name={replacing.name} role={replacing.role} size={40} />
+            <Figurine name={replacing.name} role={replacing.role} team={replacing.info.ext_team} size={40} />
             <div className="min-w-0 flex-1 text-sm">
               <p className="truncate font-semibold">{[SINGULAR[replacing.role][0].toUpperCase() + SINGULAR[replacing.role].slice(1), prettyTeam(replacing.info.ext_team), statusText(replacing.outlook)].filter(Boolean).join(" · ")}</p>
               <p className="mt-1 flex flex-wrap gap-2 text-xs">
@@ -768,7 +769,7 @@ function Editor({ teamId, proxyName, round, deadline, started, liveLabel, scored
               {g.players.map((p) => (
                 <li key={p.id} className="flex items-center gap-2">
                   <button onClick={() => pick(p.id)} className="flex min-w-0 flex-1 items-center gap-3 rounded-xl border border-line bg-surface-2 px-3 py-2 text-left hover:border-accent">
-                    <Shirt name={p.name} role={p.role} size={36} />
+                    <Figurine name={p.name} role={p.role} team={p.info.ext_team} size={36} />
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-1.5 truncate text-sm font-semibold">
                         {p.name}
@@ -836,7 +837,7 @@ function PitchPlayer({ p, badge, hot, lifted, handlers }: { p: Row; badge: "C" |
     <button {...handlers} data-zone={`s:${p.id}`} aria-label={`${p.name}: tocca per le opzioni, trascina per spostarlo`}
       className={`draggable flex w-[74px] cursor-grab flex-col items-center text-center transition ${hot ? "rounded-xl bg-white/25 ring-2 ring-card" : ""} ${lifted ? "opacity-40" : ""}`}>
       <span className="relative">
-        <Shirt name={p.name} role={p.role} size={48} />
+        <Figurine name={p.name} role={p.role} team={p.info.ext_team} size={48} />
         {badge && <span className="absolute -right-1.5 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-card px-1 text-[10px] font-extrabold text-card-ink shadow">{badge}</span>}
         {low && <span className="absolute -left-1 -top-1 size-3 rounded-full border-2 border-white bg-danger" title="Titolarità sotto il 70%" />}
       </span>
@@ -853,7 +854,7 @@ function EmptySlot({ role, hot, onClick }: { role: number; hot: boolean; onClick
   const letter = ["", "P", "D", "C", "A"][role];
   return (
     <button onClick={onClick} data-zone={`slot:${role}`} className={`flex w-[74px] flex-col items-center text-center text-white transition ${hot ? "rounded-xl bg-white/25 ring-2 ring-card" : ""}`} aria-label={`Slot vuoto ${ROLE_NAME[role]}: scegli`}>
-      <Shirt role={role} size={48} empty />
+      <Figurine role={role} size={48} empty />
       <span className="-mt-0.5 w-full rounded bg-black/30 px-1 text-[11px] font-extrabold leading-[18px]">{letter} · Scegli</span>
     </button>
   );

@@ -1,6 +1,7 @@
 import { ROLE_NAME, ROLES } from "@footballlite/core";
 import { useSearchParams } from "react-router-dom";
-import { Card, Empty, ErrorBox, PlayerAvatar, RoleTag, Spinner, StarterPercent, TeamBadge } from "../components/ui";
+import { Card, Empty, ErrorBox, RoleTag, Spinner, StarterPercent, TeamBadge } from "../components/ui";
+import { Figurine } from "../components/Figurine";
 import { useLeague, useOutlook } from "../lib/data";
 import { useSession } from "../lib/session";
 import { outlookStatus, rosterOf, scoredRoster } from "../lib/team";
@@ -71,7 +72,7 @@ export function RostersPage() {
             <ul className="-my-1 flex flex-col divide-y divide-line">
               {list.map((p) => (
                 <li key={p.id} className="flex items-center gap-2 py-2 text-sm">
-                  <PlayerAvatar name={p.name} role={p.role} size={34} />
+                  <Figurine name={p.name} role={p.role} team={p.info.ext_team} size={40} />
                   <span className="min-w-0 flex-1">
                     <span className="block truncate font-semibold">{p.name}</span>
                     <span className="block truncate text-xs text-muted">{[p.info.ext_team, p.outlook?.opponent ? `vs ${p.outlook.opponent}` : null, outlookStatus(p.outlook)].filter(Boolean).join(" · ")}</span>

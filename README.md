@@ -43,7 +43,7 @@ Non si usano voti pubblicati da terzi (i termini di Fantacalcio ne vietano l'est
 
 In alternativa l'admin può usare il rating della fonte o il voto base.
 
-Cosa FootballLite **non** fa: non accede alle API o all'app di Leghe Fantacalcio, non legge pagine di fantacalcio.it o di altri siti (pagelle comprese), non mostra foto di giocatori né loghi (al loro posto ci sono le iniziali), non riproduce articoli.
+Cosa FootballLite **non** fa: non accede alle API o all'app di Leghe Fantacalcio, non legge pagine di fantacalcio.it o di altri siti (pagelle comprese), non mostra foto di giocatori né loghi, non riproduce articoli. Al posto delle foto ci sono i **campioncini**: busti in stile cartoon disegnati dall'app (`web/src/components/Figurine.tsx`), con tratti sempre uguali per lo stesso nome e la divisa nei colori generici della squadra di Serie A (i portieri con maglie accese); sono figure inventate, senza somiglianza con la persona reale.
 
 Chi gestisce l'installazione accetta i termini delle fonti dati (Gestione lega, con il codice di setup): fino ad allora la sincronizzazione non parte. Il cron distribuisce le richieste a BSD nella giornata, con un budget di 1.500 al giorno (il piano gratuito ne concede 7.500). Con la chiave API-Football impostata (segreto `API_FOOTBALL_KEY` su GitHub, copiato nel Worker dal deploy, oppure `npx wrangler secret put API_FOOTBALL_KEY`), una volta al giorno il cron legge gli indisponibili della stagione e aggiunge il motivo dell'assenza ai giocatori a cui BSD non lo fornisce, senza mai sovrascrivere i dati BSD; l'esito è nella diagnostica di Gestione lega.
 
