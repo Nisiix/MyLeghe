@@ -14,6 +14,16 @@ export const BSD_SERIE_A = 4;
 /** Budget giornaliero che FootballLite si impone su BSD (il piano ne concede 7.500), distribuito dal cron. */
 export const BSD_DAILY_BUDGET = 1500;
 
+/** Raggiunto il tetto di richieste esterne della singola esecuzione: si riprende alla successiva. */
+export class CallCapError extends Error {}
+
+/** Conta una richiesta esterna: il piano Free di Cloudflare ne consente 50 per esecuzione. */
+function countCall(env: Env): void {
+  if (!env.calls) return;
+  if (env.calls.n >= env.calls.cap) throw new CallCapError("limite di richieste per esecuzione raggiunto");
+  env.calls.n++;
+}
+
 export class SourceError extends Error {
   constructor(public source: string, public status: number, message: string) {
     super(`${source}: ${message}`);
@@ -21,6 +31,7 @@ export class SourceError extends Error {
 }
 
 export async function fdGet<T = any>(env: Env, path: string): Promise<T> {
+  countCall(env);
   const res = await fetch(FD + path, { headers: { "X-Auth-Token": env.FOOTBALL_DATA_TOKEN } });
   const body: any = await res.json().catch(() => null);
   if (!res.ok) throw new SourceError("football-data.org", res.status, body?.message ?? `HTTP ${res.status}`);
@@ -41,6 +52,7 @@ async function useQuota(env: Env, source: string, limit: number): Promise<void> 
 }
 
 export async function bsdGet<T = any>(env: Env, path: string): Promise<T> {
+  countCall(env);
   await useQuota(env, "bsd", BSD_DAILY_BUDGET);
   // Il token incollato può contenere spazi o già il prefisso "Token": si usa solo la chiave.
   const key = (env.BSD_TOKEN ?? "").trim().replace(/^Token\s+/i, "");

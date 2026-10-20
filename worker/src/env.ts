@@ -10,4 +10,6 @@ export interface Env {
   VAPID_PUBLIC_KEY: string;
   VAPID_PRIVATE_KEY: string;
   VAPID_SUBJECT: string;
+  /** Richieste esterne fatte nell'esecuzione corrente (solo durante la sincronizzazione). */
+  calls?: { n: number; cap: number };
 }

@@ -3,18 +3,33 @@
 import { normalizeName } from "@footballlite/core";
 import type { Env } from "./env";
 import { activeRound, kvRead, kvSet, matchesOf, refreshMatchday, refreshStandings, type SaMatch } from "./schedule";
-import { BSD_SERIE_A, bsdGet, bsdList, quotaUsed, BSD_DAILY_BUDGET } from "./sources";
+import { BSD_SERIE_A, bsdGet, bsdList, quotaUsed, BSD_DAILY_BUDGET, CallCapError, SourceError } from "./sources";
 import { sourcesAccepted } from "./terms";
 
 const MIN = 60_000, HOUR = 3600_000;
 /** Richieste BSD massime per singola esecuzione del cron (ogni 10 minuti). */
-const RUN_CAP = 60;
+const RUN_CAP = 40;
+/** Richieste esterne massime per esecuzione (BSD + football-data.org): il piano Free di Cloudflare ne consente 50. */
+const MAX_EXTERNAL_CALLS = 45;
 /** Giornate passate usate per la titolarità recente. */
 export const HISTORY_ROUNDS = 5;
 
 const POSITION_ROLE: Record<string, number> = { G: 1, D: 2, M: 3, F: 4 };
 
 interface Budget { left: number }
+
+/**
+ * Aggiornamento di una singola partita: un errore temporaneo della fonte (5xx) la salta senza segnarla
+ * come aggiornata, così si riprova all'esecuzione successiva e le altre partite proseguono.
+ */
+async function perMatch(fn: () => Promise<void>): Promise<void> {
+  try {
+    await fn();
+  } catch (e) {
+    if (!(e instanceof SourceError && e.status >= 500)) throw e;
+    console.warn("sync", e.message);
+  }
+}
 
 async function due(env: Env, key: string, everyMs: number): Promise<boolean> {
   const last = await kvRead<number>(env, key);
@@ -30,25 +45,45 @@ export async function seasonId(env: Env): Promise<number> {
   return r.season.id;
 }
 
-/** Rose delle 20 squadre di Serie A (1 + 20 richieste, una volta al giorno). */
+/**
+ * Rose delle 20 squadre di Serie A, una volta al giorno (1 + 20 richieste). Si procede a blocchi:
+ * le squadre già aggiornate oggi sono salvate, così un'esecuzione interrotta riprende da quelle mancanti.
+ */
 export async function syncPlayers(env: Env, budget: Budget): Promise<void> {
-  if (budget.left < 22) return;
-  const sid = await seasonId(env);
-  const teams = await bsdList<{ id: number; name: string; short_name: string | null }>(env, `/teams/?league_id=${BSD_SERIE_A}&season_id=${sid}`, 1);
-  budget.left -= 2;
-  const now = Date.now();
-  for (const t of teams) {
-    const squad = await bsdGet<{ players: { id: number; name: string; short_name: string | null; position: string }[] }>(env, `/teams/${t.id}/squad/`);
+  if (budget.left < 2) return;
+  const day = new Date().toISOString().slice(0, 10);
+  type Team = { id: number; name: string; short_name: string | null };
+  let teams = (await kvRead<{ day: string; teams: Team[] }>(env, "bsd:teams"))?.value;
+  if (teams?.day !== day) {
+    const sid = await seasonId(env);
+    // Senza limit/offset: su /teams/ BSD risponde 502 se si passa "limit" (le 20 squadre stanno in una pagina).
+    const r = await bsdGet<{ results?: Team[] }>(env, `/teams/?league_id=${BSD_SERIE_A}&season_id=${sid}`);
+    teams = { day, teams: r.results ?? [] };
     budget.left--;
-    const stmts = squad.players.map((p) =>
-      env.DB.prepare(
-        `INSERT INTO players (id, name, short_name, role, team_name, team_ext_id, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)
-         ON CONFLICT(id) DO UPDATE SET name = excluded.name, short_name = excluded.short_name, role = excluded.role,
-           team_name = excluded.team_name, team_ext_id = excluded.team_ext_id, updated_at = excluded.updated_at`,
-      ).bind(p.id, p.name, p.short_name, POSITION_ROLE[p.position] ?? null, t.short_name ?? t.name, t.id, now));
-    if (stmts.length) await env.DB.batch(stmts);
+    await kvSet(env, "bsd:teams", teams);
   }
-  await kvSet(env, "bsd:playersDay", new Date().toISOString().slice(0, 10));
+  const prog = (await kvRead<{ day: string; done: number[] }>(env, "bsd:playersProgress"))?.value;
+  const done = new Set(prog?.day === day ? prog.done : []);
+  const now = Date.now();
+  try {
+    for (const t of teams.teams) {
+      if (done.has(t.id)) continue;
+      if (budget.left < 1) break;
+      const squad = await bsdGet<{ players: { id: number; name: string; short_name: string | null; position: string }[] }>(env, `/teams/${t.id}/squad/`);
+      budget.left--;
+      const stmts = squad.players.map((p) =>
+        env.DB.prepare(
+          `INSERT INTO players (id, name, short_name, role, team_name, team_ext_id, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)
+           ON CONFLICT(id) DO UPDATE SET name = excluded.name, short_name = excluded.short_name, role = excluded.role,
+             team_name = excluded.team_name, team_ext_id = excluded.team_ext_id, updated_at = excluded.updated_at`,
+        ).bind(p.id, p.name, p.short_name, POSITION_ROLE[p.position] ?? null, t.short_name ?? t.name, t.id, now));
+      if (stmts.length) await env.DB.batch(stmts);
+      done.add(t.id);
+    }
+  } finally {
+    await kvSet(env, "bsd:playersProgress", { day, done: [...done] });
+  }
+  if (teams.teams.every((t) => done.has(t.id))) await kvSet(env, "bsd:playersDay", day);
 }
 
 const sameTeam = (a: string, b: string) => {
@@ -164,11 +199,24 @@ export async function syncMatchStats(env: Env, m: SaMatch, budget: Budget): Prom
 }
 
 /** Un passaggio del cron: decide cosa aggiornare in base al momento della giornata e al budget. */
-export async function runSync(env: Env): Promise<{ used: number; skipped?: string }> {
+export async function runSync(baseEnv: Env): Promise<{ used: number; calls: number; partial?: boolean; skipped?: string }> {
   // Nessuna richiesta alle fonti finché chi gestisce l'installazione non ne accetta i termini.
-  if (!(await sourcesAccepted(env))) return { used: 0, skipped: "termini delle fonti non accettati" };
+  if (!(await sourcesAccepted(baseEnv))) return { used: 0, calls: 0, skipped: "termini delle fonti non accettati" };
+  const env: Env = { ...baseEnv, calls: { n: 0, cap: MAX_EXTERNAL_CALLS } };
   const before = await quotaUsed(env);
   const budget: Budget = { left: Math.min(RUN_CAP, BSD_DAILY_BUDGET - before) };
+  let partial = false;
+  try {
+    await syncSteps(env, budget);
+  } catch (e) {
+    // Tetto di richieste raggiunto: quanto fatto è salvato, il resto alla prossima esecuzione del cron.
+    if (!(e instanceof CallCapError)) throw e;
+    partial = true;
+  }
+  return { used: (await quotaUsed(env)) - before, calls: env.calls!.n, ...(partial ? { partial } : {}) };
+}
+
+async function syncSteps(env: Env, budget: Budget): Promise<void> {
   const now = Date.now();
 
   if (await due(env, "sync:fdMatches", 30 * MIN)) {
@@ -190,26 +238,28 @@ export async function runSync(env: Env): Promise<{ used: number; skipped?: strin
 
   for (const m of matches) {
     if (budget.left <= 0) break;
-    const toKick = m.kickoff - now;
-    const key = `sync:lineup:${m.id}`;
-    const state = await kvRead<{ confirmed: boolean }>(env, key);
-    if (toKick > 0 && !state?.value.confirmed) {
-      // Lontano dalla partita ogni 3 ore, nell'ultima ora e mezza ogni 10 minuti finché non è ufficiale.
-      const every = toKick < 90 * MIN ? 10 * MIN : 3 * HOUR;
-      if (toKick < 7 * 24 * HOUR && (!state || now - state.updatedAt >= every)) {
-        const confirmed = await syncLineups(env, m, budget);
-        await kvSet(env, key, { confirmed });
+    await perMatch(async () => {
+      const toKick = m.kickoff - now;
+      const key = `sync:lineup:${m.id}`;
+      const state = await kvRead<{ confirmed: boolean }>(env, key);
+      if (toKick > 0 && !state?.value.confirmed) {
+        // Lontano dalla partita ogni 3 ore, nell'ultima ora e mezza ogni 10 minuti finché non è ufficiale.
+        const every = toKick < 90 * MIN ? 10 * MIN : 3 * HOUR;
+        if (toKick < 7 * 24 * HOUR && (!state || now - state.updatedAt >= every)) {
+          const confirmed = await syncLineups(env, m, budget);
+          await kvSet(env, key, { confirmed });
+        }
+      } else if (toKick <= 0 && now - m.kickoff < 2.5 * HOUR) {
+        // In corso: statistiche e cronaca ogni 10 minuti (prima la formazione ufficiale, se manca).
+        if (!state?.value.confirmed) await kvSet(env, key, { confirmed: await syncLineups(env, m, budget) });
+        if (await due(env, `sync:live:${m.id}`, 10 * MIN)) { await syncMatchStats(env, m, budget); await kvSet(env, `sync:live:${m.id}`, now); }
+      } else if (toKick <= 0 && !(await kvRead<boolean>(env, `sync:final:${m.id}`))) {
+        // Finita: ultimo aggiornamento definitivo.
+        if (!state?.value.confirmed) await syncLineups(env, m, budget);
+        await syncMatchStats(env, m, budget);
+        await kvSet(env, `sync:final:${m.id}`, true);
       }
-    } else if (toKick <= 0 && now - m.kickoff < 2.5 * HOUR) {
-      // In corso: statistiche e cronaca ogni 10 minuti (prima la formazione ufficiale, se manca).
-      if (!state?.value.confirmed) await kvSet(env, key, { confirmed: await syncLineups(env, m, budget) });
-      if (await due(env, `sync:live:${m.id}`, 10 * MIN)) { await syncMatchStats(env, m, budget); await kvSet(env, `sync:live:${m.id}`, now); }
-    } else if (toKick <= 0 && !(await kvRead<boolean>(env, `sync:final:${m.id}`))) {
-      // Finita: ultimo aggiornamento definitivo.
-      if (!state?.value.confirmed) await syncLineups(env, m, budget);
-      await syncMatchStats(env, m, budget);
-      await kvSet(env, `sync:final:${m.id}`, true);
-    }
+    });
   }
 
   // Storico per la titolarità recente: giornate passate, poche partite per volta.
@@ -221,12 +271,13 @@ export async function runSync(env: Env): Promise<{ used: number; skipped?: strin
     for (const m of past) {
       if (budget.left <= 4) break;
       if (!m.ext_event_id || (await kvRead<boolean>(env, `sync:final:${m.id}`))) continue;
-      await syncLineups(env, m, budget);
-      await syncMatchStats(env, m, budget);
-      await kvSet(env, `sync:final:${m.id}`, true);
+      await perMatch(async () => {
+        await syncLineups(env, m, budget);
+        await syncMatchStats(env, m, budget);
+        await kvSet(env, `sync:final:${m.id}`, true);
+      });
     }
   }
-  return { used: (await quotaUsed(env)) - before };
 }
 
 /** Statistiche usate dal voto statistico (solo valori numerici non nulli, per contenere lo spazio). */
