@@ -1,6 +1,7 @@
 # Materiale proprietario LegheFC: mai nel repo pubblico
 apk/
 *.apk
+!site/download/FootballLite.apk
 *.xapk
 *-decompiled/
 re/

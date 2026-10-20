@@ -28,7 +28,7 @@
   "isChromeOSOnly": false,
   "isMetaQuest": false,
   "fullScopeUrl": "https://footballlite.fantalite-worker.workers.dev/",
-  "minSdkVersion": 21,
+  "minSdkVersion": 24,
   "orientationLock": false,
   "signingKey": { "path": "../apk/signing/footballlite.keystore", "alias": "footballlite" },
   "splashScreenFadeOutDuration": 300,

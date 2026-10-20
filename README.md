@@ -1,12 +1,16 @@
 # FootballLite
 
-App (PWA) per seguire la propria lega di fantacalcio. Le rose e il calendario li importa l'admin della lega da file; i dati di Serie A arrivano da fonti con licenza.
+App (PWA, anche come APK Android) per seguire la propria lega di fantacalcio. Rose, calendario e regolamento li inserisce l'admin della lega; i dati di Serie A arrivano da fonti con licenza.
 
-- **Dashboard.** Tabellone della giornata con la tua partita, il conto alla rovescia al primo calcio d'inizio e il pulsante «Inserisci formazione», che a giornata iniziata diventa «Visualizza live». Sotto: le partite della giornata di lega, i giocatori della tua rosa a rischio e le partite di Serie A.
-- **Formazione.** Campo con la **titolarità stimata** sotto ogni giocatore, **formazione consigliata** (fantamedia stimata × titolarità × avversario reale) sui moduli ammessi dalla lega, panchina ordinabile. A giornata iniziata è possibile una **modifica forzata**: chiede conferma, resta nello storico ed è visibile a tutta la lega (l'admin può disattivarla).
-- **Live.** Punteggio parziale della tua partita e di tutte le altre della giornata di lega; **«Simula risultato»** proietta il finale con il voto base per chi deve ancora giocare.
-- **Notifiche push** (disattivabili): promemoria se manca la formazione, avviso se un tuo titolare scende sotto il 70% di titolarità stimata, bonus e malus dei tuoi giocatori e di quelli schierati dall'avversario del calendario.
-- **Regolamento configurabile** dall'admin: schema delle rose, moduli, panchina, soglie gol, bonus e malus, voto base, modifica forzata.
+**Landing page, video e APK:** [nisiix.github.io/MyLeghe](https://nisiix.github.io/MyLeghe)
+
+- **Accesso senza account.** Si entra con il codice invito della lega e si sceglie il proprio utente. Sullo stesso dispositivo si possono avere più leghe; chi crea una lega ne diventa admin.
+- **Dashboard.** Tabellone della giornata con la tua partita (avversario dal calendario), il conto alla rovescia al primo calcio d'inizio e il pulsante «Inserisci formazione», che a giornata iniziata diventa «Visualizza live». Sotto: le partite della giornata di lega, i giocatori a rischio, le partite di Serie A.
+- **Formazione.** Campo con la **titolarità stimata** sotto ogni giocatore, **formazione consigliata** (modulo, undici, panchina, capitano) sui moduli ammessi dalla lega. A giornata iniziata è possibile una **modifica forzata**, segnalata a tutta la lega; chi non ha schierato può avere la formazione inserita da un altro utente («inserita da»).
+- **Live e simulazione.** Punteggio parziale di tutte le partite della giornata di lega e **«Simula risultato»** come in Leghe Fantacalcio: chi deve giocare vale fantavoto 6, con «Modifica voti» per cambiare presenza, voto e bonus/malus. Si applicano sostituzioni, capitano e modificatori del regolamento.
+- **Risultati ufficiali.** Reimportando il calendario esportato dalla lega, l'app mostra i risultati ufficiali con l'ora dell'ultimo import.
+- **Regolamento completo**: soglie e regole dei gol, bonus/malus per ruolo, sostituzioni (per ruolo o libere), voto d'ufficio, capitano e vice, modificatori difesa/portiere/centrocampo/attacco, fair play, fattore campo, bonus per modulo, panchina per ruolo, regola per chi non schiera.
+- **Notifiche push** (disattivabili): formazione mancante, titolari a rischio, bonus e malus tuoi e dell'avversario.
 
 > FootballLite non è affiliata a Leghe Fantacalcio® né a Fantacalcio S.r.l. «Fantacalcio» è un marchio registrato di Fantacalcio S.r.l. ed è citato solo per indicare da dove proviene il file esportato.
 
@@ -14,27 +18,27 @@ App (PWA) per seguire la propria lega di fantacalcio. Le rose e il calendario li
 
 | Dato | Fonte |
 |---|---|
-| Rose, costi, calendario e risultati della lega | File esportati dall'admin (es. «Gestione rose» e calendario di Leghe Fantacalcio), letti sul suo dispositivo e salvati nel database della lega |
+| Rose, calendario e risultati ufficiali della lega | File esportati dall'admin (es. «Gestione rose» e calendario di Leghe Fantacalcio), letti sul suo dispositivo |
 | Calendario, orari e classifica di Serie A | [football-data.org](https://www.football-data.org), piano Free |
-| Giocatori di Serie A, indisponibili, formazioni probabili e ufficiali, statistiche e cronaca | [BSD – Bzzoiro Sports Data](https://sports.bzzoiro.com), piano Free, secondo la sua licenza dati |
-| Titolarità, fantamedia, formazione consigliata, voti live | **Stime calcolate da FootballLite** su questi dati: non sono voti ufficiali |
+| Giocatori, indisponibili, formazioni probabili e ufficiali, statistiche per giocatore e cronaca | [BSD – Bzzoiro Sports Data](https://sports.bzzoiro.com), piano Free, secondo la sua licenza dati |
+| Titolarità, formazione consigliata, voti live | **Stime calcolate da FootballLite**: non sono voti ufficiali |
 
-Cosa FootballLite **non** fa: non accede alle API o all'app di Leghe Fantacalcio, non legge pagine di fantacalcio.it o di altri siti, non mostra foto di giocatori né loghi (al loro posto ci sono le iniziali), non riproduce articoli (per le notizie c'è solo un link a una ricerca esterna).
+**Voto statistico FootballLite** (`packages/core/src/vote.ts`): modello indipendente, nello spirito dei voti statistici ma non è Alvin482 (i cui pesi non sono pubblici). Pesa attacco, costruzione, difesa, portiere ed errori sulle statistiche BSD di ogni giocatore e lo confronta con i giocatori dello stesso ruolo nella stessa giornata (media 6). Sotto i 20 minuti senza eventi il giocatore è senza voto. In alternativa l'admin può usare il rating della fonte o il voto base.
 
-Il cron del Worker distribuisce le richieste a BSD nella giornata, con un budget di 1.500 richieste al giorno (il piano gratuito ne concede 7.500).
+Cosa FootballLite **non** fa: non accede alle API o all'app di Leghe Fantacalcio, non legge pagine di fantacalcio.it o di altri siti (pagelle comprese), non mostra foto di giocatori né loghi (al loro posto ci sono le iniziali), non riproduce articoli.
+
+Chi gestisce l'installazione accetta i termini delle fonti dati (pagina Admin, con il codice di setup): fino ad allora la sincronizzazione non parte. Il cron distribuisce le richieste a BSD nella giornata, con un budget di 1.500 al giorno (il piano gratuito ne concede 7.500).
 
 ## Struttura
 
 | Cartella | Contenuto |
 |---|---|
-| `packages/core` | Logica in TypeScript, con test: regolamento della lega, import di rose e calendario, abbinamento dei nomi, titolarità stimata, formazione consigliata, calcolo live, notifiche |
-| `worker` | Backend Cloudflare Worker (Hono) con database D1: accesso con codici, rose, calendario, formazioni con storico, sincronizzazione delle fonti, notifiche Web Push |
+| `packages/core` | Logica in TypeScript, con test: regolamento, import di rose e calendario, abbinamento dei nomi, titolarità, formazione consigliata, calcolo live e simulazione, voto statistico, notifiche |
+| `worker` | Backend Cloudflare Worker (Hono) con database D1: leghe e codici, rose, calendario, formazioni con storico, sincronizzazione delle fonti, notifiche Web Push |
 | `web` | PWA React + Vite + Tailwind, servita dallo stesso Worker |
+| `site` | Landing page (GitHub Pages) con video e APK |
 | `video` | Video tutorial realizzato con [HyperFrames](https://github.com/heygen-com/hyperframes) |
-
-## Accesso
-
-Non ci sono account: l'installazione ha un **codice di setup** per creare le leghe. Ogni lega ha un **codice lega** (lettura), un **codice admin** (import e regolamento) e un **codice per ogni squadra** (schierare la propria formazione). Nel database ci sono solo gli hash dei codici.
+| `android` | Configurazione dell'app Android (Trusted Web Activity, [Bubblewrap](https://github.com/GoogleChromeLabs/bubblewrap)) |
 
 ## Sviluppo in locale
 
@@ -48,7 +52,7 @@ npm test
 Crea `worker/.dev.vars` (escluso da git):
 
 ```
-SETUP_CODE=<codice per creare leghe>
+SETUP_CODE=<codice di chi gestisce l'installazione>
 SESSION_SECRET=<stringa casuale lunga>
 FOOTBALL_DATA_TOKEN=<token football-data.org>
 BSD_TOKEN=<token BSD>
@@ -62,13 +66,13 @@ npm run db:migrate:local -w worker
 npm run dev:worker
 ```
 
-## Pubblicazione su Cloudflare (piano gratuito)
+## Pubblicazione
 
-1. `npx wrangler login`, poi `npx wrangler d1 create footballlite` e copia il `database_id` in `worker/wrangler.toml`.
-2. Imposta i segreti elencati sopra con `npx wrangler secret put NOME --name footballlite`.
-3. `npm run db:migrate -w worker` e poi `npm run deploy`.
+- **Cloudflare (piano gratuito):** `npx wrangler login`; `npx wrangler d1 create footballlite` e copia il `database_id` in `worker/wrangler.toml`; imposta i segreti con `npx wrangler secret put NOME --name footballlite`; `npm run db:migrate -w worker` e `npm run deploy`.
+- **Landing (GitHub Pages):** Settings → Pages → Source «GitHub Actions»; il workflow `.github/workflows/pages.yml` pubblica la cartella `site/`.
+- **APK Android:** da `android/`, `npx @bubblewrap/cli build` con le variabili `BUBBLEWRAP_KEYSTORE_PASSWORD` e `BUBBLEWRAP_KEY_PASSWORD`. La chiave di firma non è nel repository; l'impronta SHA-256 è in `web/public/.well-known/assetlinks.json`.
 
 ## Licenze di terze parti
 
 - Font [Archivo](https://github.com/Omnibus-Type/Archivo): SIL Open Font License 1.1 (`web/public/fonts/OFL.txt`).
-- Dipendenze npm con licenze MIT, Apache-2.0, BSD e ISC (vedi `package-lock.json`).
+- Dipendenze npm con licenze MIT, Apache-2.0, BSD e ISC (vedi `package-lock.json`); HyperFrames Apache-2.0; Bubblewrap Apache-2.0.
