@@ -836,8 +836,8 @@ function PitchPlayer({ p, badge, hot, lifted, handlers }: { p: Row; badge: "C" |
   return (
     <button {...handlers} data-zone={`s:${p.id}`} aria-label={`${p.name}: tocca per le opzioni, trascina per spostarlo`}
       className={`draggable flex w-[74px] cursor-grab flex-col items-center text-center transition ${hot ? "rounded-xl bg-white/25 ring-2 ring-card" : ""} ${lifted ? "opacity-40" : ""}`}>
-      <span className="relative">
-        <Figurine name={p.name} role={p.role} team={p.info.ext_team} size={48} />
+      <span className="relative rounded-full bg-white/20 p-0.5">
+        <Figurine name={p.name} role={p.role} team={p.info.ext_team} size={58} />
         {badge && <span className="absolute -right-1.5 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-card px-1 text-[10px] font-extrabold text-card-ink shadow">{badge}</span>}
         {low && <span className="absolute -left-1 -top-1 size-3 rounded-full border-2 border-white bg-danger" title="Titolarità sotto il 70%" />}
       </span>
@@ -854,7 +854,7 @@ function EmptySlot({ role, hot, onClick }: { role: number; hot: boolean; onClick
   const letter = ["", "P", "D", "C", "A"][role];
   return (
     <button onClick={onClick} data-zone={`slot:${role}`} className={`flex w-[74px] flex-col items-center text-center text-white transition ${hot ? "rounded-xl bg-white/25 ring-2 ring-card" : ""}`} aria-label={`Slot vuoto ${ROLE_NAME[role]}: scegli`}>
-      <Figurine role={role} size={48} empty />
+      <Figurine role={role} size={58} empty />
       <span className="-mt-0.5 w-full rounded bg-black/30 px-1 text-[11px] font-extrabold leading-[18px]">{letter} · Scegli</span>
     </button>
   );
