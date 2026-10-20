@@ -144,6 +144,8 @@ jobs:
             echo "links_changed=true" >> "$GITHUB_OUTPUT"
           fi
           git commit -m "APK Android $(jq -r .appVersionName android/twa-manifest.json) compilato da GitHub Actions"
+          # Versione e icone del manifest sono calcolate a ogni build: non vanno nel repository.
+          git checkout -- android/twa-manifest.json
           git pull --rebase origin main
           git push origin HEAD:main
           echo "published=true" >> "$GITHUB_OUTPUT"
