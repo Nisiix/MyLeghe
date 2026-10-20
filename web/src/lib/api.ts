@@ -24,7 +24,7 @@ export async function api<T>(path: string, init?: { method?: string; body?: unkn
   try { body = text ? JSON.parse(text) : null; } catch { body = text; }
   if (!res.ok) {
     // Accesso fatto da un altro dispositivo (o profilo azzerato): si resta nella lega e si torna alla scelta dell'utente.
-    if (res.status === 401 && s && body?.otherDevice && s.leagueToken) session.leaveUser(body.error);
+    if (res.status === 401 && s && body?.otherDevice && s.leagueToken) session.leaveProfile(body.error);
     else if (res.status === 401 && s) session.logout();
     throw new ApiError(res.status, body?.error ?? `Errore ${res.status}`, body);
   }
@@ -41,7 +41,7 @@ export interface LeagueAccess {
   teams: AccessTeam[];
 }
 
-/** Squadra tra cui scegliere: `username` è null finché il profilo non è stato creato. */
+/** Squadra della rosa: `username` è il profilo a cui è collegata (null se libera). */
 export interface AccessTeam { id: number; name: string; username: string | null }
 
 /** Primo passo: codice condiviso della lega (più eventuale codice admin). Errore 409 se la lega non è pronta. */
@@ -64,14 +64,34 @@ export async function createLeague(name: string): Promise<{ leagueCode: string; 
   return { leagueCode: r.leagueCode, adminCode: r.adminCode };
 }
 
-/**
- * Secondo passo: scelta dell'utente (squadra) con username e password.
- * Al primo accesso il profilo viene creato; l'accesso resta valido solo su questo dispositivo (l'ultimo login).
- */
-export async function chooseTeam(teamId: number, username: string, password: string): Promise<void> {
+interface ProfileLogin { token: string; userId: number; username: string; teamId: number | null }
+
+function openProfile(r: ProfileLogin) {
   const s = session.get();
-  const r = await api<{ token: string; teamId: number; username: string }>("/session/team", { method: "POST", body: { teamId, username, password } });
-  session.update({ token: r.token, leagueToken: s?.leagueToken ?? s?.token, myTeamId: r.teamId, username: r.username, notice: null });
+  session.update({ token: r.token, leagueToken: s?.leagueToken ?? s?.token, userId: r.userId, username: r.username, myTeamId: r.teamId, notice: null });
+  return r;
+}
+
+/** Secondo passo: login del profilo. Se ha già la squadra collegata si entra direttamente con quella. */
+export async function loginProfile(username: string, password: string): Promise<ProfileLogin> {
+  return openProfile(await api<ProfileLogin>("/session/login", { method: "POST", body: { username, password } }));
+}
+
+/** Creazione del profilo (username e password) nella lega. L'accesso resta valido solo su questo dispositivo (l'ultimo login). */
+export async function registerProfile(username: string, password: string): Promise<ProfileLogin> {
+  return openProfile(await api<ProfileLogin>("/session/register", { method: "POST", body: { username, password } }));
+}
+
+/** Terzo passo, una sola volta: collegamento della squadra della rosa al profilo. */
+export async function linkTeam(teamId: number): Promise<void> {
+  const r = await api<{ token: string; teamId: number }>("/session/team", { method: "POST", body: { teamId } });
+  session.update({ token: r.token, myTeamId: r.teamId });
+}
+
+/** Scollega la squadra dal profilo (impostazioni): si potrà sceglierne di nuovo una. */
+export async function unlinkTeam(): Promise<void> {
+  const r = await api<{ token: string }>("/session/team", { method: "DELETE" });
+  session.update({ token: r.token, myTeamId: null });
 }
 
 export function savedLeagueCode(): string {

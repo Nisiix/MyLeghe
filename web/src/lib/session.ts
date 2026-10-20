@@ -8,11 +8,12 @@ export interface Session {
   leagueToken?: string;
   league: { id: string; name: string };
   admin: boolean;
-  /** Utente (squadra) scelto dopo il codice condiviso. */
+  /** Squadra della rosa collegata al profilo (scelta una sola volta; si scollega dalle impostazioni). */
   myTeamId: number | null;
-  /** Username del profilo con cui si è entrati. */
+  /** Profilo (username e password) con cui si è entrati. */
+  userId?: number | null;
   username?: string | null;
-  /** Avviso da mostrare nella scelta dell'utente (es. accesso fatto da un altro dispositivo). */
+  /** Avviso da mostrare all'accesso (es. accesso fatto da un altro dispositivo). */
   notice?: string | null;
 }
 
@@ -60,10 +61,10 @@ export const session = {
   switchTo(leagueId: string) {
     if (store.sessions[leagueId]) write({ ...store, current: leagueId });
   },
-  /** Torna alla scelta dell'utente della lega corrente (si resta nella lega con il token della sola lega). */
-  leaveUser(notice?: string) {
+  /** Esce dal profilo restando nella lega (token della sola lega): si torna al login con username e password. */
+  leaveProfile(notice?: string) {
     if (!currentSnapshot) return;
-    session.set({ ...currentSnapshot, token: currentSnapshot.leagueToken ?? currentSnapshot.token, myTeamId: null, username: null, notice: notice ?? null });
+    session.set({ ...currentSnapshot, token: currentSnapshot.leagueToken ?? currentSnapshot.token, myTeamId: null, userId: null, username: null, notice: notice ?? null });
   },
   /** Esce dalla lega corrente; se ce ne sono altre si passa alla prima. */
   logout() {

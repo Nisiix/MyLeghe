@@ -2,15 +2,16 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { Button, Card, ErrorBox, TeamBadge } from "../components/ui";
-import { acceptAppTerms, accessTeams, ApiError, appTermsAccepted, chooseTeam, createLeague, enterLeague, savedLeagueCode, type AccessTeam, type LeagueAccess } from "../lib/api";
+import { acceptAppTerms, accessTeams, ApiError, appTermsAccepted, createLeague, enterLeague, linkTeam, loginProfile, registerProfile, savedLeagueCode, type AccessTeam, type LeagueAccess } from "../lib/api";
 import { session, useLeagues, useSession } from "../lib/session";
 
 const codeInput = "rounded-xl border border-line bg-surface px-3 py-3 uppercase tracking-widest outline-none focus:border-accent";
 const textInput = "rounded-xl border border-line bg-surface px-3 py-3 outline-none focus:border-accent";
 
 /**
- * Accesso: si entra in una lega con il codice invito (poi si sceglie il proprio utente, con username e password)
- * oppure se ne crea una nuova. Le leghe già usate su questo dispositivo si riaprono in automatico.
+ * Accesso: si entra in una lega con il codice invito, poi con username e password del proprio profilo;
+ * la prima volta si collega la squadra della rosa (poi il profilo entra direttamente con quella).
+ * Oppure si crea una nuova lega. Le leghe già usate su questo dispositivo si riaprono in automatico.
  */
 export function Access() {
   const s = useSession();
@@ -20,14 +21,14 @@ export function Access() {
   const [access, setAccess] = useState<LeagueAccess | null>(null);
   const [mode, setMode] = useState<"choose" | "join" | "create">(params.has("crea") ? "create" : params.has("nuova") ? "join" : "choose");
 
-  // Sessione già aperta (utente non scelto, "Cambia utente" o dopo il salvataggio del regolamento): si ricarica l'elenco.
+  // Profilo collegato ma senza squadra (prima volta o dopo lo scollegamento): elenco delle squadre.
   // Non durante la creazione di una lega: la scheda con i codici deve restare visibile.
   const pending = useQuery({
     queryKey: ["access-teams", s?.league.id],
-    enabled: !!s && !access && mode !== "create",
+    enabled: !!s?.userId && !s.myTeamId && mode !== "create",
     queryFn: accessTeams,
   });
-  const teams = mode === "create" ? null : access?.teams ?? pending.data ?? null;
+  const teams = mode === "create" ? null : pending.data ?? null;
 
   return (
     <div className="mx-auto flex min-h-full max-w-sm flex-col justify-center px-6 py-10">
@@ -36,8 +37,10 @@ export function Access() {
         <h1 className="scoreboard text-5xl leading-none">FootballLite</h1>
         <p className="mt-2 text-sm text-muted">La tua lega, la tua formazione, il live della giornata.</p>
       </div>
-      {s && teams ? (
-        <ChooseUser teams={teams} admin={s.admin} currentTeamId={s.myTeamId} notice={s.notice ?? null} />
+      {s && mode !== "create" && !s.userId ? (
+        <ProfileLogin leagueName={s.league.name} admin={s.admin} notice={s.notice ?? null} />
+      ) : s && teams ? (
+        <ChooseTeam teams={teams} admin={s.admin} />
       ) : s && pending.error ? (
         <ErrorBox error={pending.error} onRetry={() => pending.refetch()} />
       ) : mode === "create" ? (
@@ -130,7 +133,7 @@ function AppTerms({ checked, onChange }: { checked: boolean; onChange: (v: boole
           <li>Titolarità, formazione consigliata e punteggi live sono <b>stime</b> calcolate su dati di football-data.org e BSD: non sono voti o risultati ufficiali.</li>
           <li>Le formazioni inserite qui restano in FootballLite: non vengono inviate a nessun'altra piattaforma.</li>
           <li>Sul dispositivo vengono salvati il codice della lega e la sessione; sul server i nomi delle squadre e dei giocatori importati dall'admin, l'username e l'hash della password del tuo utente e, se attivi le notifiche, l'indirizzo push del browser.</li>
-          <li>L'accesso con username e password resta attivo solo sull'ultimo dispositivo da cui sei entrato.</li>
+          <li>L'accesso con username e password resta attivo solo sull'ultimo dispositivo da cui sei entrato. La squadra collegata al profilo si cambia solo scollegandola dalle impostazioni.</li>
         </ul>
       </details>
       <label className="mt-2 flex items-start gap-2">
@@ -142,90 +145,99 @@ function AppTerms({ checked, onChange }: { checked: boolean; onChange: (v: boole
 }
 
 /**
- * Scelta dell'utente (squadra) nella lega. Ogni utente ha un profilo con username e password:
- * al primo accesso lo crea, poi inserisce la password. L'accesso resta valido solo sull'ultimo dispositivo usato.
+ * Login del profilo con username e password (o creazione del profilo). Dopo il login, se il profilo ha già
+ * la squadra collegata si entra direttamente; altrimenti si sceglie la squadra (una sola volta).
+ * L'accesso resta valido solo sull'ultimo dispositivo usato.
  */
-function ChooseUser({ teams, admin, currentTeamId, notice }: { teams: AccessTeam[]; admin: boolean; currentTeamId: number | null; notice: string | null }) {
+function ProfileLogin({ leagueName, admin, notice }: { leagueName: string; admin: boolean; notice: string | null }) {
   const navigate = useNavigate();
   const qc = useQueryClient();
-  const [picked, setPicked] = useState<AccessTeam | null>(null);
+  const [isNew, setIsNew] = useState(false);
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
   const [error, setError] = useState<unknown>(null);
   const [busy, setBusy] = useState(false);
 
-  function pick(t: AccessTeam) {
-    setError(null);
-    // L'utente già collegato su questo dispositivo non deve reinserire la password.
-    if (t.id === currentTeamId) { navigate("/", { replace: true }); return; }
-    setPicked(t); setUsername(t.username ?? ""); setPassword(""); setConfirm("");
-  }
   async function submit(e: React.FormEvent) {
     e.preventDefault();
-    if (!picked) return;
-    if (!picked.username && password !== confirm) { setError(new Error("Le due password non coincidono.")); return; }
+    if (isNew && password !== confirm) { setError(new Error("Le due password non coincidono.")); return; }
     setBusy(true); setError(null);
     try {
-      await chooseTeam(picked.id, username.trim(), password);
-      qc.clear();
-      navigate("/", { replace: true });
+      const r = isNew ? await registerProfile(username.trim(), password) : await loginProfile(username.trim(), password);
+      qc.invalidateQueries();
+      // Squadra già collegata: si entra direttamente. Altrimenti resta la scelta della squadra.
+      if (r.teamId) navigate("/", { replace: true });
     } catch (err) { setError(err); } finally { setBusy(false); }
   }
 
-  if (picked) {
-    const isNew = !picked.username;
-    return (
-      <form onSubmit={submit} className="flex flex-col gap-3">
-        <div className="flex items-center gap-3"><TeamBadge id={picked.id} name={picked.name} size={36} /><h2 className="scoreboard text-2xl">{picked.name}</h2></div>
-        <p className="-mt-1 text-sm text-muted">{isNew ? "Primo accesso: scegli username e password per questo utente. Serviranno per entrare dagli altri dispositivi." : "Inserisci la password del tuo utente."}</p>
+  return (
+    <form onSubmit={submit} className="flex flex-col gap-3">
+      <h2 className="scoreboard text-2xl">{isNew ? "Crea il tuo profilo" : "Il tuo profilo"}</h2>
+      <p className="-mt-2 text-sm text-muted">{leagueName}: {isNew ? "scegli username e password. Poi collegherai la tua squadra." : "entra con username e password."}</p>
+      {notice && <div role="alert" className="rounded-xl border border-card bg-card/25 p-3 text-sm">{notice}</div>}
+      <label className="flex flex-col gap-1 text-sm">
+        <span className="font-semibold">Username</span>
+        <input className={textInput} value={username} onChange={(e) => setUsername(e.target.value)} autoComplete="username" autoCapitalize="off" minLength={3} maxLength={24} required />
+      </label>
+      <label className="flex flex-col gap-1 text-sm">
+        <span className="font-semibold">Password</span>
+        <input type="password" className={textInput} value={password} onChange={(e) => setPassword(e.target.value)} autoComplete={isNew ? "new-password" : "current-password"} minLength={isNew ? 6 : 1} required />
+      </label>
+      {isNew && (
         <label className="flex flex-col gap-1 text-sm">
-          <span className="font-semibold">Username</span>
-          <input className={textInput} value={username} onChange={(e) => setUsername(e.target.value)} autoComplete="username" autoCapitalize="off" minLength={3} maxLength={24} required readOnly={!isNew} />
+          <span className="font-semibold">Ripeti la password</span>
+          <input type="password" className={textInput} value={confirm} onChange={(e) => setConfirm(e.target.value)} autoComplete="new-password" required />
         </label>
-        <label className="flex flex-col gap-1 text-sm">
-          <span className="font-semibold">Password</span>
-          <input type="password" className={textInput} value={password} onChange={(e) => setPassword(e.target.value)} autoComplete={isNew ? "new-password" : "current-password"} minLength={isNew ? 6 : 1} required />
-        </label>
-        {isNew && (
-          <label className="flex flex-col gap-1 text-sm">
-            <span className="font-semibold">Ripeti la password</span>
-            <input type="password" className={textInput} value={confirm} onChange={(e) => setConfirm(e.target.value)} autoComplete="new-password" required />
-          </label>
-        )}
-        {!!error && <ErrorBox error={error} />}
-        <Button type="submit" variant="card" disabled={busy} className="mt-2 py-3 text-base">{busy ? "Verifica…" : isNew ? "Crea e entra" : "Entra"}</Button>
-        <p className="text-[11px] text-muted">L'accesso resta memorizzato su questo dispositivo: entrando da un altro dispositivo, qui servirà di nuovo la password.{!isNew && " Password dimenticata? Chiedi all'admin di azzerare il tuo utente."}</p>
-        <button type="button" className="mt-1 text-xs text-muted underline" onClick={() => setPicked(null)}>Indietro</button>
-      </form>
-    );
+      )}
+      {!!error && <ErrorBox error={error} />}
+      <Button type="submit" variant="card" disabled={busy} className="mt-2 py-3 text-base">{busy ? "Verifica…" : isNew ? "Crea profilo" : "Entra"}</Button>
+      <button type="button" className="text-xs font-semibold text-accent underline" onClick={() => { setIsNew(!isNew); setError(null); }}>{isNew ? "Ho già un profilo" : "Non ho ancora un profilo: crealo"}</button>
+      <p className="text-[11px] text-muted">L'accesso resta memorizzato su questo dispositivo: entrando da un altro dispositivo, qui servirà di nuovo la password.{!isNew && " Password dimenticata? Chiedi all'admin di eliminare il tuo profilo."}</p>
+      {admin && <button type="button" className="text-xs text-muted underline" onClick={() => { session.update({ notice: null }); navigate("/admin"); }}>Vai alla gestione della lega</button>}
+      <button type="button" className="text-xs text-muted underline" onClick={() => session.logout()}>Esci da questa lega</button>
+    </form>
+  );
+}
+
+/** Collegamento della squadra della rosa al profilo: si sceglie una sola volta (poi si può scollegare dalle impostazioni). */
+function ChooseTeam({ teams, admin }: { teams: AccessTeam[]; admin: boolean }) {
+  const navigate = useNavigate();
+  const qc = useQueryClient();
+  const [error, setError] = useState<unknown>(null);
+  const [busy, setBusy] = useState(false);
+  async function pick(t: AccessTeam) {
+    if (!confirm(`Collegare il tuo profilo alla squadra ${t.name}? Potrai cambiarla solo scollegandola dalle impostazioni.`)) return;
+    setBusy(true); setError(null);
+    try { await linkTeam(t.id); qc.invalidateQueries(); navigate("/", { replace: true }); } catch (e) { setError(e); } finally { setBusy(false); }
   }
+  const free = teams.filter((t) => !t.username);
   return (
     <div className="flex flex-col gap-3">
-      <h2 className="scoreboard text-2xl">Chi sei?</h2>
-      <p className="-mt-2 text-sm text-muted">Scegli il tuo utente: potrai schierarne la formazione.</p>
-      {notice && <div role="alert" className="rounded-xl border border-card bg-card/25 p-3 text-sm">{notice}</div>}
+      <h2 className="scoreboard text-2xl">Qual è la tua squadra?</h2>
+      <p className="-mt-2 text-sm text-muted">Collega al tuo profilo la squadra della rosa: da ora in poi entrerai direttamente con questa.</p>
       {teams.length === 0 && (
         <p className="rounded-xl border border-line bg-surface p-3 text-sm text-muted">
-          Nessun utente disponibile: {admin ? <>importa le rose dalla <Link to="/admin" className="underline">gestione della lega</Link>.</> : "l'admin deve ancora importare le rose."}
+          Nessuna squadra disponibile: {admin ? <>importa le rose dalla <Link to="/admin" className="underline">gestione della lega</Link>.</> : "l'admin deve ancora importare le rose."}
         </p>
       )}
+      {teams.length > 0 && free.length === 0 && <p className="rounded-xl border border-line bg-surface p-3 text-sm text-muted">Tutte le squadre sono già collegate a un profilo: chiedi all'admin.</p>}
       <ul className="flex flex-col gap-2">
         {teams.map((t) => (
           <li key={t.id}>
-            <button onClick={() => pick(t)} className={`flex w-full items-center gap-3 rounded-xl border p-3 text-left hover:border-accent ${t.id === currentTeamId ? "border-accent bg-accent/10" : "border-line bg-surface"}`}>
+            <button onClick={() => pick(t)} disabled={busy || !!t.username} className="flex w-full items-center gap-3 rounded-xl border border-line bg-surface p-3 text-left hover:border-accent disabled:opacity-50 disabled:hover:border-line">
               <TeamBadge id={t.id} name={t.name} size={36} />
               <span className="min-w-0 flex-1">
                 <span className="block font-semibold">{t.name}</span>
-                <span className="block text-xs text-muted">{t.id === currentTeamId ? "Collegato su questo dispositivo" : t.username ? `@${t.username}` : "Profilo da creare"}</span>
+                <span className="block text-xs text-muted">{t.username ? `Collegata a @${t.username}` : "Libera"}</span>
               </span>
             </button>
           </li>
         ))}
       </ul>
       {!!error && <ErrorBox error={error} />}
-      {admin && <button className="text-xs text-muted underline" onClick={() => { session.update({ notice: null }); navigate("/admin"); }}>Vai alla gestione della lega</button>}
-      <button className="text-xs text-muted underline" onClick={() => session.logout()}>Esci da questa lega</button>
+      {admin && <button className="text-xs text-muted underline" onClick={() => navigate("/admin")}>Vai alla gestione della lega</button>}
+      <button className="text-xs text-muted underline" onClick={() => { session.leaveProfile(); }}>Esci dal profilo</button>
     </div>
   );
 }

@@ -91,10 +91,10 @@ export async function requireSession(c: Context<AppEnv>, next: Next) {
   const claims = token ? await verifySession(c.env, token) : null;
   if (!claims) return c.json({ error: "Sessione scaduta: inserisci di nuovo il codice lega." }, 401);
   if (claims.uid) {
-    const u = await c.env.DB.prepare("SELECT session_id, team_id FROM users WHERE id = ? AND league_id = ?").bind(claims.uid, claims.lid).first<{ session_id: string | null; team_id: number }>();
-    if (!u) return c.json({ error: "Profilo utente azzerato dall'admin: scegli di nuovo il tuo utente.", otherDevice: true }, 401);
+    const u = await c.env.DB.prepare("SELECT session_id, team_id FROM users WHERE id = ? AND league_id = ?").bind(claims.uid, claims.lid).first<{ session_id: string | null; team_id: number | null }>();
+    if (!u) return c.json({ error: "Profilo eliminato dall'admin: crea di nuovo username e password.", otherDevice: true }, 401);
     if (u.session_id !== claims.sid) return c.json({ error: "Hai effettuato l'accesso da un altro dispositivo: inserisci di nuovo la password per usare l'app qui.", otherDevice: true }, 401);
-    claims.tids = [u.team_id];
+    claims.tids = u.team_id ? [u.team_id] : [];
   }
   c.set("session", claims);
   await next();

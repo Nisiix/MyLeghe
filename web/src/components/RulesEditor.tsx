@@ -84,8 +84,8 @@ export function RulesEditor({ config }: { config: LeagueConfig }) {
     try {
       await api("/league/admin/settings", { method: "PUT", body: normalizeConfig(c) });
       await qc.invalidateQueries({ queryKey: ["league"] });
-      // Impostazioni salvate: si passa alla scelta dell'utente nella lega.
-      navigate("/accesso?utente");
+      // Impostazioni salvate: si passa all'accesso del profilo e alla scelta della squadra (se non già collegata).
+      navigate("/accesso");
     } catch (e) { setMsg({ ok: false, text: (e as Error).message }); }
   }
 

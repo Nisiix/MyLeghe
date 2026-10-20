@@ -1,7 +1,7 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { StrictMode, type ReactNode } from "react";
 import { createRoot } from "react-dom/client";
-import { BrowserRouter, Navigate, Route, Routes, useLocation } from "react-router-dom";
+import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import { registerSW } from "virtual:pwa-register";
 import { Layout } from "./components/Layout";
 import { useSession } from "./lib/session";
@@ -28,11 +28,9 @@ function Guard({ children }: { children: ReactNode }) {
 
 function App() {
   const s = useSession();
-  // Con ?utente la scelta dell'utente si apre anche se un utente è già collegato (es. dopo il salvataggio del regolamento).
-  const chooseUser = new URLSearchParams(useLocation().search).has("utente");
   return (
     <Routes>
-      <Route path="/accesso" element={s?.myTeamId && !chooseUser ? <Navigate to="/" replace /> : <Access />} />
+      <Route path="/accesso" element={s?.myTeamId && !s.notice ? <Navigate to="/" replace /> : <Access />} />
       <Route element={<Guard><Layout /></Guard>}>
         <Route index element={<Dashboard />} />
         <Route path="formazione" element={<LineupPage />} />

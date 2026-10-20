@@ -165,34 +165,34 @@ function CalibrationNote() {
   );
 }
 
-interface UserRow { team_id: number; team: string; username: string | null; last_login_at: number | null }
+interface UserRow { id: number; username: string; last_login_at: number | null; team_id: number | null; team: string | null }
 
-/** Profili utente delle squadre: l'admin può azzerarne uno (password dimenticata) perché venga creato di nuovo. */
+/** Profili utente della lega con la squadra collegata: l'admin può eliminarne uno (password dimenticata) perché venga creato di nuovo. */
 function UsersCard() {
   const qc = useQueryClient();
   const q = useQuery({ queryKey: ["admin-users"], queryFn: () => api<UserRow[]>("/league/admin/users") });
   const [error, setError] = useState<unknown>(null);
   async function reset(u: UserRow) {
-    if (!confirm(`Azzerare il profilo di ${u.team}? L'utente dovrà creare di nuovo username e password e verrà scollegato dai suoi dispositivi.`)) return;
+    if (!confirm(`Eliminare il profilo @${u.username}? L'utente dovrà creare di nuovo username e password${u.team ? ` e la squadra ${u.team} tornerà libera` : ""}.`)) return;
     setError(null);
     try {
-      await api(`/league/admin/users/${u.team_id}`, { method: "DELETE" });
+      await api(`/league/admin/users/${u.id}`, { method: "DELETE" });
       await qc.invalidateQueries({ queryKey: ["admin-users"] });
       await qc.invalidateQueries({ queryKey: ["access-teams"] });
     } catch (e) { setError(e); }
   }
   return (
     <Card title="Utenti">
-      <p className="mb-3 text-sm text-muted">Ogni squadra ha un profilo con username e password, creato dal suo utente al primo accesso. L'accesso resta attivo solo sull'ultimo dispositivo usato.</p>
-      {q.isLoading ? <Spinner /> : !q.data?.length ? <Empty>Nessuna squadra: importa prima le rose.</Empty> : (
+      <p className="mb-3 text-sm text-muted">Ogni partecipante crea un profilo con username e password e collega una volta la sua squadra della rosa (può scollegarla dalle impostazioni). L'accesso resta attivo solo sull'ultimo dispositivo usato.</p>
+      {q.isLoading ? <Spinner /> : !q.data?.length ? <Empty>Nessun profilo ancora creato.</Empty> : (
         <ul className="divide-y divide-line text-sm">
           {q.data.map((u) => (
-            <li key={u.team_id} className="flex items-center justify-between gap-3 py-2">
+            <li key={u.id} className="flex items-center justify-between gap-3 py-2">
               <span className="min-w-0">
-                <span className="block font-semibold">{u.team}</span>
-                <span className="block text-xs text-muted">{u.username ? `@${u.username}${u.last_login_at ? ` · ultimo accesso ${new Date(u.last_login_at).toLocaleDateString("it-IT")}` : ""}` : "Profilo da creare"}</span>
+                <span className="block font-semibold">@{u.username}</span>
+                <span className="block text-xs text-muted">{u.team ?? "Nessuna squadra collegata"}{u.last_login_at ? ` · ultimo accesso ${new Date(u.last_login_at).toLocaleDateString("it-IT")}` : ""}</span>
               </span>
-              {u.username && <button className="shrink-0 text-xs font-semibold text-danger" onClick={() => reset(u)}>Azzera</button>}
+              <button className="shrink-0 text-xs font-semibold text-danger" onClick={() => reset(u)}>Elimina</button>
             </li>
           ))}
         </ul>
