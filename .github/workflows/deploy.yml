@@ -47,6 +47,10 @@ jobs:
       - name: Diagnostica Cloudflare (account, permessi del token, database D1 visibili)
         working-directory: worker
         run: |
+          echo "Token in uso: inizia con ${CLOUDFLARE_API_TOKEN:0:5}…, lunghezza ${#CLOUDFLARE_API_TOKEN} caratteri"
+          echo "Verifica del token (API Cloudflare):"
+          curl -sS https://api.cloudflare.com/client/v4/user/tokens/verify -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" | sed 's/"id":"\([a-f0-9]\{8\}\)[a-f0-9]*"/"id":"\1…"/' || true
+          echo
           npx wrangler whoami || true
           npx wrangler d1 list || true
       - name: Migrazioni D1
