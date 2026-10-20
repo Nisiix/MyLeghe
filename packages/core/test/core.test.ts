@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   DEFAULT_CONFIG, dueReminder, goalsFromPoints, matchPlayer, normalizeConfig, parseCsv, parseRosterGrid,
-  parseCalendarGrid, playerLiveScore, computeTeam, statVote, computeMatch, matchGoals, noLineupScore, scorePlayers, starterDrops, starterProbability, suggestLineup, validateLineup,
+  parseCalendarGrid, playerLiveScore, computeTeam, statVote, normalizeRound, computeMatch, matchGoals, noLineupScore, scorePlayers, starterDrops, starterProbability, suggestLineup, validateLineup,
   type Cell, type RosterEntry,
 } from "../src";
 
@@ -244,5 +244,15 @@ describe("voto statistico FootballLite", () => {
     const ev = { minutes: 10, goals: 0, assists: 0, yellow: 0, red: 0, penaltyScored: 0, penaltyMissed: 0, penaltySaved: 0, ownGoals: 0, goalsConceded: 0, stats: {} };
     expect(playerLiveScore("x", 3, ev, "finished", cfg).state).toBe("absent");
     expect(playerLiveScore("x", 3, { ...ev, goals: 1 }, "finished", cfg).state).toBe("played");
+  });
+});
+
+describe("normalizzazione di giornata", () => {
+  it("porta la media di ruolo a 6 e distingue i migliori", () => {
+    const entries = Array.from({ length: 10 }, (_, i) => ({ id: i, role: 3 as const, raw: i * 0.2, minutes: 90 }));
+    const v = normalizeRound(entries);
+    const avg = [...v.values()].reduce((a, b) => a + b, 0) / v.size;
+    expect(Math.abs(avg - 6)).toBeLessThan(0.3);
+    expect(v.get(9)!).toBeGreaterThan(v.get(0)!);
   });
 });

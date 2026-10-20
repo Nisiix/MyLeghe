@@ -23,6 +23,8 @@ const clamp = (x: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, x
 
 export interface StatVoteBreakdown {
   vote: number;
+  /** Scostamento grezzo dal 6 (prima dell'arrotondamento), usato dalla normalizzazione di giornata. */
+  raw: number;
   attack: number;
   buildUp: number;
   defense: number;
@@ -76,7 +78,33 @@ export function statVote(stats: PlayerStats, role: Role): StatVoteBreakdown | nu
   // Pesi per ruolo: i difensori sono giudicati più sulla fase difensiva, gli attaccanti su quella offensiva.
   const w = { 1: [0.2, 0.3, 0.3], 2: [0.8, 0.8, 1.5], 3: [1, 1.2, 1], 4: [1.2, 0.9, 0.5] }[role] as [number, number, number];
   const delta = attack * w[0] + buildUp * w[1] + defense * w[2] + goalkeeping + errors;
-  const vote = clamp(Math.round((6 + clamp(delta, -3, 3)) * 2) / 2, 3, 10);
+  const vote = roundVote(6 + clamp(delta, -3, 3));
   const r2 = (x: number) => Math.round(x * 100) / 100;
-  return { vote, attack: r2(attack * w[0]), buildUp: r2(buildUp * w[1]), defense: r2(defense * w[2]), goalkeeping: r2(goalkeeping), errors: r2(errors) };
+  return { vote, raw: r2(delta), attack: r2(attack * w[0]), buildUp: r2(buildUp * w[1]), defense: r2(defense * w[2]), goalkeeping: r2(goalkeeping), errors: r2(errors) };
+}
+
+const roundVote = (v: number) => clamp(Math.round(v * 2) / 2, 3, 10);
+
+export interface RoundEntry { id: number; role: Role; raw: number; minutes: number }
+
+/**
+ * Normalizzazione di giornata, come nei voti statistici: ogni giocatore è confrontato con quelli dello stesso ruolo
+ * nella stessa giornata. Lo scostamento dalla media di ruolo (in deviazioni standard) diventa un voto con media 6
+ * e dispersione `spread`. Media e deviazione sono calcolate su chi ha giocato almeno 45 minuti.
+ */
+export function normalizeRound(entries: RoundEntry[], spread = 0.65): Map<number, number> {
+  const out = new Map<number, number>();
+  for (const role of [1, 2, 3, 4] as Role[]) {
+    const all = entries.filter((e) => e.role === role);
+    const base = all.filter((e) => e.minutes >= 45);
+    const sample = base.length >= 5 ? base : all;
+    if (sample.length < 3) {
+      for (const e of all) out.set(e.id, roundVote(6 + clamp(e.raw, -3, 3)));
+      continue;
+    }
+    const mean = sample.reduce((a, e) => a + e.raw, 0) / sample.length;
+    const sd = Math.sqrt(sample.reduce((a, e) => a + (e.raw - mean) ** 2, 0) / sample.length) || 1;
+    for (const e of all) out.set(e.id, roundVote(6 + clamp(((e.raw - mean) / sd) * spread, -3, 3)));
+  }
+  return out;
 }

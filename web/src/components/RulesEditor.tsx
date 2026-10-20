@@ -230,7 +230,7 @@ export function RulesEditor({ config }: { config: LeagueConfig }) {
           {c.noLineup.mode === "fixed" && <Num label="Punteggio assegnato" value={c.noLineup.points} onChange={(v) => setC({ ...c, noLineup: { ...c.noLineup, points: v } })} />}
         </Section>
 
-        <Section title="Voti stimati" note="I voti ufficiali non sono disponibili. Il voto statistico FootballLite è un modello indipendente (non Alvin482): pesa attacco, costruzione, difesa, portiere ed errori dalle statistiche BSD di ogni giocatore; sotto i 20 minuti senza eventi il giocatore è senza voto.">
+        <Section title="Voti stimati" note="I voti ufficiali non sono disponibili. Il voto statistico FootballLite è un modello indipendente, nello spirito dei voti statistici (non è Alvin482): pesa attacco, costruzione, difesa, portiere ed errori dalle statistiche BSD, poi confronta ogni giocatore con quelli dello stesso ruolo nella giornata (media 6). Sotto i 20 minuti senza eventi il giocatore è senza voto.">
           <label className="flex items-center justify-between gap-3">
             <span>Come stimare il voto</span>
             <select className="rounded-lg border border-line bg-surface px-2 py-1" value={c.voteModel} onChange={(e) => setC({ ...c, voteModel: e.target.value as LeagueConfig["voteModel"] })}>

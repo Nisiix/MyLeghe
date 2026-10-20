@@ -20,6 +20,8 @@ export interface MatchEvents {
   rating?: number | null;
   /** Statistiche complete della partita (per il voto statistico). */
   stats?: PlayerStats | null;
+  /** Voto statistico già normalizzato sulla giornata (calcolato dal backend su tutti i giocatori). */
+  statVote?: number | null;
 }
 
 export type MatchState = "pending" | "live" | "finished";
@@ -62,6 +64,7 @@ export function fantavote(e: MatchEvents, role: Role, cfg: LeagueConfig, finishe
 /** Voto stimato secondo il modello scelto dalla lega; se mancano i dati si passa al successivo (statistico → rating → base). */
 export function estimateVote(e: MatchEvents, role: Role, cfg: LeagueConfig): number | null {
   if (cfg.voteModel === "base") return cfg.baseVote;
+  if (cfg.voteModel === "stats" && typeof e.statVote === "number") return e.statVote;
   if (cfg.voteModel === "stats" && e.stats) {
     const v = statVote({ ...e.stats, minutes_played: e.minutes }, role);
     if (v) return v.vote;

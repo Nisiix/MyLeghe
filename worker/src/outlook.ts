@@ -1,6 +1,6 @@
 // Dati aggregati per l'app: giornata attiva, titolarità stimata e dati live dei giocatori delle rose.
 
-import { fantavote, starterProbability, type LeagueConfig, type MatchEvents, type PlayerStats, type Role } from "@footballlite/core";
+import { fantavote, normalizeRound, starterProbability, statVote, type LeagueConfig, type MatchEvents, type PlayerStats, type Role, type RoundEntry } from "@footballlite/core";
 import { Hono } from "hono";
 import { requireSession, type AppEnv } from "./auth";
 import type { Env } from "./env";
@@ -135,8 +135,18 @@ outlook.get("/league/live/:round", async (c) => {
     const fd = p.team_ext_id ? teamMap[p.team_ext_id] : undefined;
     state[p.id] = stateOf(ms.find((m) => m.home_id === fd || m.away_id === fd));
   }
+  // Voto statistico normalizzato sulla giornata: confronto con tutti i giocatori dello stesso ruolo (non solo delle rose).
+  const everyone = await c.env.DB.prepare(
+    "SELECT pm.player_id, pm.minutes, pm.stats, COALESCE(p.role, 3) AS role FROM player_match pm LEFT JOIN players p ON p.id = pm.player_id WHERE pm.matchday = ? AND pm.minutes > 0",
+  ).bind(round).all<{ player_id: number; minutes: number; stats: string | null; role: Role }>();
+  const entries: RoundEntry[] = [];
+  for (const e of everyone.results ?? []) {
+    const v = statVote({ ...(e.stats ? (JSON.parse(e.stats) as PlayerStats) : {}), minutes_played: e.minutes }, e.role);
+    if (v) entries.push({ id: e.player_id, role: e.role, raw: v.raw, minutes: e.minutes });
+  }
+  const normalized = normalizeRound(entries);
   const events: Record<number, MatchEvents> = {};
-  for (const r of rows.results ?? []) events[r.player_id] = toEvents(r);
+  for (const r of rows.results ?? []) events[r.player_id] = { ...toEvents(r), statVote: normalized.get(r.player_id) ?? null };
   return c.json({
     round,
     matches: ms.map((m) => ({ id: m.id, kickoff: m.kickoff, status: m.status, home: m.home_name, away: m.away_name, score: m.score_home === null ? null : [m.score_home, m.score_away], state: stateOf(m) })),
