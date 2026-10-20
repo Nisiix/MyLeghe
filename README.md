@@ -87,7 +87,7 @@ npm run dev:worker
 - **Pulizia dei dati:** la migrazione `0009_users_reset.sql` svuota leghe, squadre, rose, formazioni, calendari e notifiche (i dati di Serie A restano). In seguito si può ripetere con `curl -X POST -H "x-setup-code: <SETUP_CODE>" https://<worker>/api/setup/reset`.
 - **Cloudflare (piano gratuito):** `npx wrangler login`; `npx wrangler d1 create footballlite` e copia il `database_id` in `worker/wrangler.toml`; imposta i segreti con `npx wrangler secret put NOME --name footballlite`; `npm run db:migrate -w worker` e `npm run deploy`.
 - **Landing (GitHub Pages):** Settings → Pages → Source «GitHub Actions»; il workflow `.github/workflows/pages.yml` pubblica la cartella `site/`.
-- **APK Android:** da `android/`, `npx @bubblewrap/cli build` con le variabili `BUBBLEWRAP_KEYSTORE_PASSWORD` e `BUBBLEWRAP_KEY_PASSWORD`. La chiave di firma non è nel repository; l'impronta SHA-256 è in `web/public/.well-known/assetlinks.json`.
+- **APK Android:** lo compila, firma e pubblica sulla landing il workflow `.github/workflows/apk.yml` (GitHub Actions) quando cambiano la configurazione Android, le icone o il manifest, oppure a mano con «Run workflow»; il numero di versione cresce a ogni compilazione. Una tantum servono i secret `ANDROID_KEYSTORE_BASE64` (la chiave di firma in base64), `BUBBLEWRAP_KEYSTORE_PASSWORD` e `BUBBLEWRAP_KEY_PASSWORD`. La chiave non è nel repository; l'impronta SHA-256 è in `web/public/.well-known/assetlinks.json`. In locale: da `android/`, `npx @bubblewrap/cli build` con le stesse due variabili delle password.
 
 ## Licenze di terze parti
 
