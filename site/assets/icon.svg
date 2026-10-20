@@ -2,68 +2,56 @@
 <defs>
 <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#1a1740"/><stop offset=".55" stop-color="#3a3470"/><stop offset="1" stop-color="#6a6aa6"/></linearGradient>
 <linearGradient id="bolt" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff5a8"/><stop offset="1" stop-color="#ffd23b"/></linearGradient>
+<linearGradient id="trail" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#ff9f1c" stop-opacity="0"/><stop offset=".55" stop-color="#ffcf4a"/><stop offset="1" stop-color="#fff5a8"/></linearGradient>
 <clipPath id="sq"><rect width="512" height="512"/></clipPath>
-<clipPath id="ball"><circle cx="256" cy="318" r="142"/></clipPath>
-<clipPath id="grass"><path d="M-20 392 Q256 300 532 392 V540 H-20 Z"/></clipPath>
+<clipPath id="ball"><circle cx="292" cy="222" r="132"/></clipPath>
+<clipPath id="grass"><path d="M-20 412 Q256 330 532 412 V540 H-20 Z"/></clipPath>
 </defs>
 <g clip-path="url(#sq)">
-<!-- Cielo temporalesco a tutto bordo -->
 <rect width="512" height="512" fill="url(#sky)"/>
-<circle cx="200" cy="120" r="150" fill="#ffffff" fill-opacity=".05"/>
-<!-- Pioggia -->
-<g stroke="#b9c6ff" stroke-opacity=".55" stroke-width="5" stroke-linecap="round"><line x1="321" y1="67" x2="310" y2="97" /><line x1="39" y1="27" x2="27" y2="62" /><line x1="86" y1="177" x2="73" y2="213" /><line x1="49" y1="249" x2="41" y2="273" /><line x1="28" y1="34" x2="17" y2="65" /><line x1="418" y1="25" x2="409" y2="50" /><line x1="82" y1="272" x2="71" y2="303" /><line x1="50" y1="279" x2="43" y2="300" /><line x1="218" y1="288" x2="211" y2="307" /><line x1="396" y1="15" x2="387" y2="40" /><line x1="37" y1="275" x2="29" y2="297" /><line x1="286" y1="204" x2="278" y2="226" /><line x1="110" y1="282" x2="101" y2="309" /><line x1="175" y1="42" x2="162" y2="78" /><line x1="182" y1="180" x2="175" y2="201" /><line x1="54" y1="278" x2="47" y2="297" /><line x1="200" y1="244" x2="186" y2="283" /><line x1="427" y1="150" x2="416" y2="182" /><line x1="454" y1="175" x2="445" y2="202" /><line x1="244" y1="82" x2="230" y2="122" /><line x1="239" y1="31" x2="226" y2="67" /><line x1="297" y1="258" x2="285" y2="291" /><line x1="341" y1="219" x2="332" y2="246" /><line x1="64" y1="50" x2="52" y2="84" /><line x1="418" y1="74" x2="408" y2="102" /><line x1="145" y1="240" x2="134" y2="271" /></g>
+<g stroke="#b9c6ff" stroke-opacity=".5" stroke-width="5" stroke-linecap="round"><line x1="453" y1="276" x2="442" y2="308" /><line x1="452" y1="250" x2="439" y2="286" /><line x1="184" y1="84" x2="172" y2="118" /><line x1="477" y1="312" x2="464" y2="349" /><line x1="180" y1="38" x2="169" y2="70" /><line x1="300" y1="62" x2="293" y2="82" /><line x1="32" y1="294" x2="22" y2="324" /><line x1="453" y1="324" x2="440" y2="361" /><line x1="151" y1="309" x2="145" y2="327" /><line x1="54" y1="20" x2="47" y2="39" /><line x1="184" y1="113" x2="171" y2="150" /><line x1="20" y1="227" x2="10" y2="255" /><line x1="441" y1="292" x2="433" y2="316" /><line x1="229" y1="317" x2="220" y2="344" /><line x1="501" y1="-8" x2="487" y2="31" /><line x1="77" y1="224" x2="64" y2="262" /><line x1="274" y1="198" x2="262" y2="233" /><line x1="75" y1="120" x2="65" y2="148" /><line x1="225" y1="252" x2="216" y2="279" /><line x1="20" y1="25" x2="7" y2="61" /><line x1="100" y1="195" x2="93" y2="216" /><line x1="287" y1="187" x2="280" y2="207" /><line x1="7" y1="-10" x2="-1" y2="14" /><line x1="204" y1="16" x2="192" y2="49" /><line x1="374" y1="193" x2="363" y2="224" /><line x1="64" y1="279" x2="51" y2="317" /></g>
 <!-- Fulmini -->
-<polygon points="438,-10 392,112 426,108 384,214 462,86 428,90 470,-10" fill="url(#bolt)" stroke="#17162f" stroke-width="9" stroke-linejoin="round"/>
-<polygon points="66,22 44,96 64,94 38,160 96,80 74,82 100,22" fill="url(#bolt)" stroke="#17162f" stroke-width="8" stroke-linejoin="round"/>
-<!-- Nuvoloni scuri -->
+<polygon points="452,-10 410,96 442,92 404,190 478,72 446,76 486,-10" fill="url(#bolt)" stroke="#17162f" stroke-width="9" stroke-linejoin="round"/>
+<polygon points="58,40 36,114 56,112 30,178 88,98 66,100 92,40" fill="url(#bolt)" stroke="#17162f" stroke-width="8" stroke-linejoin="round"/>
+<!-- Nuvoloni -->
 <g fill="#4a4680" stroke="#17162f" stroke-width="11" stroke-linejoin="round">
-<path d="M-30 150 a46 46 0 0 1 74 -36 a40 40 0 0 1 70 12 a34 34 0 0 1 36 50 H-40 Z"/>
-<path d="M250 120 a42 42 0 0 1 70 -30 a38 38 0 0 1 66 16 a32 32 0 0 1 24 44 H236 a32 32 0 0 1 14 -30 Z"/>
-<path d="M430 200 a40 40 0 0 1 66 -28 a34 34 0 0 1 60 20 a30 30 0 0 1 10 40 H420 Z"/>
+<path d="M-30 120 a46 46 0 0 1 74 -36 a40 40 0 0 1 70 12 a34 34 0 0 1 36 50 H-40 Z"/>
+<path d="M430 236 a40 40 0 0 1 66 -28 a34 34 0 0 1 60 20 a30 30 0 0 1 10 40 H420 Z"/>
+<path d="M150 56 a34 34 0 0 1 56 -22 a30 30 0 0 1 50 14 a26 26 0 0 1 18 34 H140 a26 26 0 0 1 10 -26 Z"/>
 </g>
-<g fill="#6a66a8">
-<path d="M-30 150 a46 46 0 0 1 74 -36 a40 40 0 0 1 70 12 a34 34 0 0 1 36 50 H-40 Z" transform="translate(0 -14) scale(1 .6)" opacity=".5"/>
+<!-- Prato -->
+<path d="M-20 412 Q256 330 532 412 V540 H-20 Z" fill="#2f8f3c" stroke="#17162f" stroke-width="12"/>
+<g clip-path="url(#grass)" fill="#237a2f"><polygon points="-20,540 60,540 140,360 90,360"/><polygon points="180,540 260,540 290,350 240,350"/><polygon points="380,540 460,540 532,400 532,460"/></g>
+<g fill="none" stroke="#ffffff" stroke-opacity=".85" stroke-width="9" stroke-linecap="round" clip-path="url(#grass)"><path d="M-20 470 Q256 392 532 470"/><ellipse cx="256" cy="486" rx="150" ry="34"/></g>
+<!-- Ombra lontana del pallone in volo -->
+<ellipse cx="300" cy="468" rx="62" ry="12" fill="#17162f" fill-opacity=".35"/>
+<!-- Scia di volo: cometa dal basso a sinistra -->
+<g transform="rotate(-32 292 222)">
+<path d="M292 130 L-178 232 L292 314 Z" fill="url(#trail)" opacity=".95"/>
+<path d="M292 170 L-38 222 L292 274 Z" fill="#fff5a8" opacity=".85"/>
 </g>
-<!-- Prato scuro con strisce -->
-<path d="M-20 392 Q256 300 532 392 V540 H-20 Z" fill="#2f8f3c" stroke="#17162f" stroke-width="12"/>
-<g clip-path="url(#grass)" fill="#237a2f">
-<polygon points="-20,540 60,540 140,340 90,340"/><polygon points="180,540 260,540 290,330 240,330"/><polygon points="380,540 460,540 532,380 532,440"/>
+<g fill="none" stroke="#fff5a8" stroke-width="9" stroke-linecap="round">
+<path d="M70 352 q-30 -10 -58 2"/><path d="M110 404 q-34 -6 -70 10"/><path d="M48 296 q-24 -18 -56 -14"/>
 </g>
-<g fill="none" stroke="#ffffff" stroke-opacity=".85" stroke-width="9" stroke-linecap="round" clip-path="url(#grass)">
-<path d="M-20 452 Q256 372 532 452"/>
-<ellipse cx="256" cy="470" rx="150" ry="36"/>
+<!-- Pallone in volo, leggermente ruotato -->
+<g transform="translate(0 16) rotate(14 292 222)">
+<circle cx="292" cy="222" r="138" fill="#ffffff" stroke="#17162f" stroke-width="14"/>
+<g clip-path="url(#ball)"><polygon points="292.0,342.0 261.6,319.9 273.2,284.1 310.8,284.1 322.4,319.9" fill="#17162f"/><polygon points="133.2,147.9 174.3,125.1 208.7,157.2 188.8,199.8 142.2,194.1" fill="#17162f"/><polygon points="450.8,147.9 441.8,194.1 395.2,199.8 375.3,157.2 409.7,125.1" fill="#17162f"/><polygon points="166.7,347.3 158.9,298.6 202.9,276.1 237.9,311.1 215.4,355.1" fill="#17162f"/><polygon points="417.3,347.3 368.6,355.1 346.1,311.1 381.1,276.1 425.1,298.6" fill="#17162f"/><polygon points="292.0,48.8 328.1,75.0 314.3,117.5 269.7,117.5 255.9,75.0" fill="#17162f"/><polygon points="263.3,384.7 238.8,359.4 255.4,328.2 290.1,334.3 295.0,369.3" fill="#17162f"/>
+<path d="M154 286 Q292 390 430 286 V370 H154 Z" fill="#17162f" fill-opacity=".16"/>
 </g>
-<!-- Ombra e linee di carica -->
-<ellipse cx="256" cy="466" rx="120" ry="20" fill="#17162f" fill-opacity=".35"/>
-<g fill="none" stroke="#fff5a8" stroke-width="10" stroke-linecap="round">
-<path d="M96 262 q-40 -4 -68 -30"/><path d="M84 316 q-44 6 -74 -8"/><path d="M110 212 q-36 -16 -54 -46"/>
-<path d="M426 420 q30 16 54 52"/><path d="M448 378 q34 -4 60 14"/>
-</g>
-<!-- Pallone -->
-<circle cx="256" cy="318" r="148" fill="#ffffff" stroke="#17162f" stroke-width="14"/>
-<g clip-path="url(#ball)"><polygon points="256.0,444.0 223.7,420.5 236.0,382.5 276.0,382.5 288.3,420.5" fill="#17162f"/><polygon points="80.2,254.0 121.2,226.4 160.1,256.8 143.2,303.2 93.8,301.5" fill="#17162f"/><polygon points="431.8,254.0 418.2,301.5 368.8,303.2 351.9,256.8 390.8,226.4" fill="#17162f"/><polygon points="111.2,439.5 107.6,387.9 155.5,368.5 188.8,408.2 161.4,452.0" fill="#17162f"/><polygon points="400.8,439.5 350.6,452.0 323.2,408.2 356.5,368.5 404.4,387.9" fill="#17162f"/><polygon points="256.0,133.0 294.0,160.6 279.5,205.3 232.5,205.3 218.0,160.6" fill="#17162f"/>
-<path d="M108 388 Q256 496 404 388 V476 H108 Z" fill="#17162f" fill-opacity=".16"/>
-</g>
-<!-- Volto: arrabbiato ma carico -->
+<!-- Volto in stile diverso: occhi a mandorla con palpebra decisa, sopracciglio unico, bocca spalancata -->
 <g>
-<ellipse cx="206" cy="286" rx="34" ry="38" fill="#ffffff" stroke="#17162f" stroke-width="10"/>
-<ellipse cx="306" cy="286" rx="34" ry="38" fill="#ffffff" stroke="#17162f" stroke-width="10"/>
-<circle cx="214" cy="294" r="16" fill="#17162f"/><circle cx="314" cy="294" r="16" fill="#17162f"/>
-<circle cx="221" cy="287" r="6" fill="#ffffff"/><circle cx="321" cy="287" r="6" fill="#ffffff"/>
-<circle cx="208" cy="302" r="3" fill="#ffffff"/><circle cx="308" cy="302" r="3" fill="#ffffff"/>
-<!-- Sopracciglia a V, spesse -->
-<path d="M160 232 L242 268" stroke="#17162f" stroke-width="18" stroke-linecap="round"/>
-<path d="M352 232 L270 268" stroke="#17162f" stroke-width="18" stroke-linecap="round"/>
-<!-- Vena di rabbia e gocce di sudore/emozione -->
-<path d="M350 182 q10 14 22 0 M356 198 q10 14 22 0" fill="none" stroke="#ff5d5d" stroke-width="7" stroke-linecap="round"/>
-<path d="M154 214 q-14 22 0 32 q14 -10 0 -32 Z" fill="#7fd3ff" stroke="#17162f" stroke-width="6" stroke-linejoin="round"/>
-<!-- Gran sorriso carico con denti -->
-<path d="M190 342 q66 70 132 0 q-66 20 -132 0 Z" fill="#c0232b" stroke="#17162f" stroke-width="10" stroke-linejoin="round"/>
-<path d="M196 344 h120 q-10 16 -60 16 q-50 0 -60 -16 Z" fill="#ffffff"/>
-<path d="M226 346 v14 M256 348 v16 M286 346 v14" stroke="#17162f" stroke-width="4"/>
-<ellipse cx="164" cy="344" rx="20" ry="12" fill="#ff7c7c" fill-opacity=".8"/><ellipse cx="348" cy="344" rx="20" ry="12" fill="#ff7c7c" fill-opacity=".8"/>
+<path d="M214 196 q22 -30 56 -8 q-6 34 -36 36 q-26 -2 -20 -28 Z" fill="#ffffff" stroke="#17162f" stroke-width="9" stroke-linejoin="round"/>
+<path d="M306 188 q34 -22 56 8 q6 26 -20 28 q-30 -2 -36 -36 Z" fill="#ffffff" stroke="#17162f" stroke-width="9" stroke-linejoin="round"/>
+<circle cx="250" cy="208" r="13" fill="#2b6cff"/><circle cx="250" cy="208" r="7" fill="#17162f"/><circle cx="254" cy="203" r="3.5" fill="#ffffff"/>
+<circle cx="334" cy="208" r="13" fill="#2b6cff"/><circle cx="334" cy="208" r="7" fill="#17162f"/><circle cx="338" cy="203" r="3.5" fill="#ffffff"/>
+<path d="M208 160 q44 -4 84 20 q40 -24 84 -20" fill="none" stroke="#17162f" stroke-width="14" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M236 256 q56 -16 112 0 q-6 62 -56 62 q-50 0 -56 -62 Z" fill="#8f1b25" stroke="#17162f" stroke-width="9" stroke-linejoin="round"/>
+<path d="M244 258 q48 -10 96 0 q-4 12 -48 12 q-44 0 -48 -12 Z" fill="#ffffff"/>
+<ellipse cx="292" cy="304" rx="26" ry="14" fill="#ff6b7a"/>
+<ellipse cx="200" cy="250" rx="18" ry="10" fill="#ff7c7c" fill-opacity=".7"/><ellipse cx="384" cy="250" rx="18" ry="10" fill="#ff7c7c" fill-opacity=".7"/>
 </g>
-<!-- Riflesso -->
-<path d="M154 232 q20 -46 66 -62" fill="none" stroke="#ffffff" stroke-width="14" stroke-linecap="round" stroke-opacity=".9"/>
+<path d="M196 150 q22 -44 66 -58" fill="none" stroke="#ffffff" stroke-width="13" stroke-linecap="round" stroke-opacity=".9"/>
+</g>
 </g>
 </svg>
