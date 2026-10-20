@@ -1,6 +1,7 @@
 // Sincronizzazione dei dati con licenza (BSD e football-data.org), distribuita nella giornata dal cron.
 
 import { normalizeName, subRolesFromLineup } from "@footballlite/core";
+import { afEnabled, syncInjuriesAF } from "./apifootball";
 import type { Env } from "./env";
 import { rematchUnmatched } from "./matching";
 import { activeRound, kvRead, kvSet, matchesOf, refreshMatchday, refreshStandings, type SaMatch } from "./schedule";
@@ -309,6 +310,12 @@ async function syncSteps(env: Env, budget: Budget): Promise<void> {
       await perMatch(async () => { const confirmed = await syncLineups(env, m, budget); await kvSet(env, `sync:lineup:${m.id}`, { confirmed }); });
     }
     await kvSet(env, dayKey, true);
+  }
+  // Seconda fonte (facoltativa) per il motivo delle assenze: una richiesta al giorno, dopo la fonte principale.
+  const afKey = `af:injuries:${day}`;
+  if (afEnabled(env) && !(await kvRead<boolean>(env, afKey))) {
+    await syncInjuriesAF(env, rounds);
+    await kvSet(env, afKey, true);
   }
 
   // Storico per la titolarità recente: giornate passate, poche partite per volta.

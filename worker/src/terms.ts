@@ -12,6 +12,11 @@ export const SOURCE_TERMS = {
       url: "https://sports.bzzoiro.com/terms/",
       note: "Piano Free: giocatori, indisponibili, formazioni, statistiche. Dati usati solo nella propria app, senza ridistribuire i dati grezzi; età minima 16 anni.",
     },
+    {
+      name: "API-Football (facoltativa)",
+      url: "https://www.api-football.com/terms",
+      note: "Piano Free: motivo delle assenze (infortunio, squalifica…). Usata solo se chi gestisce l'installazione imposta la propria chiave.",
+    },
   ],
 };
 

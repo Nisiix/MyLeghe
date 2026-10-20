@@ -57,3 +57,10 @@ jobs:
         run: npm run db:migrate -w worker
       - name: Build e deploy
         run: npm run deploy
+      # Chiave API-Football (facoltativa): se è tra i segreti di GitHub viene copiata nel Worker a ogni deploy.
+      - name: Chiave API-Football
+        env:
+          API_FOOTBALL_KEY: ${{ secrets.API_FOOTBALL_KEY }}
+        if: ${{ env.API_FOOTBALL_KEY != '' }}
+        working-directory: worker
+        run: printf '%s' "$API_FOOTBALL_KEY" | npx wrangler secret put API_FOOTBALL_KEY

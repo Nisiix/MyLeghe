@@ -2,11 +2,16 @@
 // - football-data.org (piano Free): calendario, orari e classifica di Serie A.
 // - BSD, sports.bzzoiro.com (piano Free, 7.500 richieste/giorno): giocatori, indisponibili,
 //   formazioni probabili/ufficiali, statistiche e cronaca delle partite.
+// - API-Football, api-sports.io (piano Free, 100 richieste/giorno, facoltativa): motivo delle assenze.
 
 import type { Env } from "./env";
 
 const FD = "https://api.football-data.org/v4";
 const BSD = "https://sports.bzzoiro.com/api/v2";
+const AF = "https://v3.football.api-sports.io";
+
+/** Budget giornaliero su API-Football (il piano Free ne concede 100). */
+export const AF_DAILY_BUDGET = 90;
 
 /** Serie A su BSD. */
 export const BSD_SERIE_A = 4;
@@ -72,4 +77,18 @@ export async function bsdList<T = any>(env: Env, path: string, maxPages = 5): Pr
     if (!r.next) break;
   }
   return out;
+}
+
+/** API-Football: la risposta è sempre 200, gli errori stanno in `errors`; i dati in `response`. */
+export async function afGet<T = any>(env: Env, path: string): Promise<T> {
+  countCall(env);
+  await useQuota(env, "af", AF_DAILY_BUDGET);
+  const key = (env.API_FOOTBALL_KEY ?? "").trim();
+  const res = await fetch(AF + path, { headers: { "x-apisports-key": key, Accept: "application/json" } });
+  const body: any = await res.json().catch(() => null);
+  if (!res.ok) throw new SourceError("API-Football", res.status, body?.message ?? `HTTP ${res.status}`);
+  const errors = body?.errors;
+  const msgs = errors && typeof errors === "object" ? Object.values(errors).filter((v) => typeof v === "string") : Array.isArray(errors) ? errors : [];
+  if (msgs.length) throw new SourceError("API-Football", 400, String(msgs[0]));
+  return (body?.response ?? []) as T;
 }

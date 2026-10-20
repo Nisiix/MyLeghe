@@ -28,4 +28,5 @@ VAPID_SUBJECT = "https://footballlite.footballlite-app.workers.dev"
 #   SESSION_SECRET        chiave per firmare le sessioni
 #   FOOTBALL_DATA_TOKEN   token football-data.org (piano Free)
 #   BSD_TOKEN             token BSD sports.bzzoiro.com (piano Free)
+#   API_FOOTBALL_KEY      facoltativo: chiave API-Football api-sports.io (piano Free) per il motivo delle assenze
 #   VAPID_PUBLIC_KEY / VAPID_PRIVATE_KEY   chiavi Web Push

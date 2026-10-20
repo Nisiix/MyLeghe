@@ -214,6 +214,7 @@ interface UnmatchedRow { team_id: number; slot: number; name: string; role: numb
 interface SourcesState {
   accepted: boolean; poolSize: number; playersUpdatedAt: number | null; bsdUsedToday: number; bsdBudget: number;
   lastSync: { at: number; ok: boolean; error?: string; used?: number; calls?: number; skipped?: string } | null; unmatched: number; rosterSize: number;
+  apiFootball: { enabled: boolean; last: { at: number; ok: boolean; error?: string; read?: number; applied?: number; season?: number } | null };
 }
 
 /** Stato della fonte dati: spiega perché i giocatori non sono abbinati (fonte vuota, termini non accettati, errore del cron). */
@@ -234,6 +235,9 @@ function SourcesNote() {
           Fonte dati: <b>{d.poolSize}</b> giocatori di Serie A{d.playersUpdatedAt ? `, aggiornati il ${when(d.playersUpdatedAt)}` : ""}. Rosa della lega: {d.rosterSize - d.unmatched}/{d.rosterSize} abbinati.
           {d.lastSync && !d.lastSync.ok && <> Ultima sincronizzazione fallita ({when(d.lastSync.at)}): {d.lastSync.error}.</>}
           {" "}Richieste BSD oggi: {d.bsdUsedToday}/{d.bsdBudget}.
+          {d.apiFootball?.enabled && (
+            <> Motivo delle assenze (API-Football): {!d.apiFootball.last ? "prima lettura al prossimo passaggio del cron." : d.apiFootball.last.ok ? `${d.apiFootball.last.applied ?? 0} giocatori aggiornati il ${when(d.apiFootball.last.at)} (stagione ${d.apiFootball.last.season}).` : `errore il ${when(d.apiFootball.last.at)}: ${d.apiFootball.last.error}.`}</>
+          )}
         </p>
       )}
     </div>

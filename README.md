@@ -27,6 +27,7 @@ App (PWA, anche come APK Android) per seguire la propria lega di fantacalcio. Ro
 | Rose, calendario e risultati ufficiali della lega | File esportati dall'admin (es. «Gestione rose» e calendario di Leghe Fantacalcio), letti sul suo dispositivo. I giocatori vengono abbinati alla fonte dati in automatico per cognome e, tra omonimi, per iniziale del nome e ruolo (anche dopo l'aggiornamento giornaliero dei giocatori di Serie A); quelli su cui l'automatico non può decidere si abbinano a mano tra i candidati, dalla pagina Formazione («Abbina») o dalla pagina Admin |
 | Calendario, orari e classifica di Serie A | [football-data.org](https://www.football-data.org), piano Free |
 | Giocatori, indisponibili, formazioni probabili e ufficiali, statistiche per giocatore e cronaca | [BSD – Bzzoiro Sports Data](https://sports.bzzoiro.com), piano Free, secondo la sua licenza dati |
+| Motivo delle assenze (infortunio, squalifica, in dubbio), in aggiunta a BSD | [API-Football](https://www.api-football.com), piano Free, **facoltativa**: solo se chi gestisce l'installazione imposta la propria chiave (`API_FOOTBALL_KEY`). Una richiesta al giorno; non fornisce il rientro previsto |
 | Titolarità, formazione consigliata, voti live | **Stime calcolate da FootballLite**: non sono voti ufficiali |
 
 **Voto statistico FootballLite** (`packages/core/src/vote.ts`): stima sulla scala del fantacalcio dalle statistiche BSD, non è il voto ufficiale.
@@ -44,7 +45,7 @@ In alternativa l'admin può usare il rating della fonte o il voto base.
 
 Cosa FootballLite **non** fa: non accede alle API o all'app di Leghe Fantacalcio, non legge pagine di fantacalcio.it o di altri siti (pagelle comprese), non mostra foto di giocatori né loghi (al loro posto ci sono le iniziali), non riproduce articoli.
 
-Chi gestisce l'installazione accetta i termini delle fonti dati (Gestione lega, con il codice di setup): fino ad allora la sincronizzazione non parte. Il cron distribuisce le richieste a BSD nella giornata, con un budget di 1.500 al giorno (il piano gratuito ne concede 7.500).
+Chi gestisce l'installazione accetta i termini delle fonti dati (Gestione lega, con il codice di setup): fino ad allora la sincronizzazione non parte. Il cron distribuisce le richieste a BSD nella giornata, con un budget di 1.500 al giorno (il piano gratuito ne concede 7.500). Con la chiave API-Football impostata (segreto `API_FOOTBALL_KEY` su GitHub, copiato nel Worker dal deploy, oppure `npx wrangler secret put API_FOOTBALL_KEY`), una volta al giorno il cron legge gli indisponibili della stagione e aggiunge il motivo dell'assenza ai giocatori a cui BSD non lo fornisce, senza mai sovrascrivere i dati BSD; l'esito è nella diagnostica di Gestione lega.
 
 ## Struttura
 
@@ -73,6 +74,7 @@ SETUP_CODE=<codice di chi gestisce l'installazione>
 SESSION_SECRET=<stringa casuale lunga>
 FOOTBALL_DATA_TOKEN=<token football-data.org>
 BSD_TOKEN=<token BSD>
+API_FOOTBALL_KEY=<facoltativa: chiave API-Football>
 VAPID_PUBLIC_KEY=<chiave pubblica VAPID, base64url>
 VAPID_PRIVATE_KEY=<chiave privata VAPID (d), base64url>
 ```

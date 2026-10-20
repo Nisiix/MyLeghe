@@ -5,6 +5,7 @@ import { Hono, type Context } from "hono";
 import { hashPassword, MIN_PASSWORD, newCode, normalizeCode, requireAdmin, requireSession, sha256, signSession, USERNAME_RE, verifyPassword, type AppEnv, type SessionClaims } from "./auth";
 import { bestOf, playerPool, rematchUnmatched } from "./matching";
 import { kvRead, kvSet } from "./schedule";
+import { afEnabled, afLast } from "./apifootball";
 import { BSD_DAILY_BUDGET, quotaUsed } from "./sources";
 import { SOURCE_TERMS, sourcesAccepted } from "./terms";
 import { calibrateLeague, type CalibrationResult } from "./calibration";
@@ -341,6 +342,7 @@ league.get("/league/admin/sources", async (c) => {
     lastSync: last ? { at: last.updatedAt, ...last.value } : null,
     unmatched: unmatched?.n ?? 0,
     rosterSize: total?.n ?? 0,
+    apiFootball: afEnabled(c.env) ? { enabled: true, last: await afLast(c.env) } : { enabled: false, last: null },
   });
 });
 
