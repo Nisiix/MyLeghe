@@ -1,7 +1,7 @@
 import type { Modifier, TeamMatchScore } from "@footballlite/core";
 import { useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
-import { Button, Card, Empty, ErrorBox, RoleTag, Sheet, Spinner, StarterPercent, Tabs, TeamBadge, fmt } from "../components/ui";
+import { Button, Card, Empty, ErrorBox, RoleTag, Sheet, Spinner, StarterPercent, TeamBadge, fmt } from "../components/ui";
 import { useCalendar, useLeague, useLineups, useLive, useOutlook, useRound, type CalendarRow, type LeagueData, type Lineup, type LiveData, type Outlook } from "../lib/data";
 import { useSession } from "../lib/session";
 import { SIM_DEFAULT_VOTE, leagueMatches, matchCalc, myMatch, rosterOf, simKey, teamCalc, type MatchCalc, type Named, type SimOverrides, type TeamCalc } from "../lib/team";
@@ -16,9 +16,8 @@ export function LivePage() {
   const live = useLive(md, round.data?.phase === "live");
   const outlook = useOutlook();
   const [params, setParams] = useSearchParams();
-  // Il risultato stimato (chi deve ancora giocare vale 6) si vede subito, come «Simula risultato» di Leghe Fantacalcio;
-  // «Solo voti arrivati» mostra il parziale con i soli voti già disponibili.
-  const [simulate, setSimulate] = useState(true);
+  // Il risultato stimato (chi deve ancora giocare vale 6) è l'unica vista, come «Simula risultato» di Leghe Fantacalcio.
+  const simulate = true;
   const [overrides, setOverrides] = useState<SimOverrides>({});
   const [editing, setEditing] = useState(false);
 
@@ -27,7 +26,8 @@ export function LivePage() {
   const data = league.data!;
   const cfg = data.league.config;
   const matches = leagueMatches(calendar.data, md!);
-  if (!matches.length) return <Card title="Live"><Empty>Nessuna partita di lega in questa giornata (calendario non importato o giornata di riposo).</Empty></Card>;
+  const started = round.data!.phase !== "upcoming";
+  if (!matches.length) return <Card title={started ? "Live" : "Altre formazioni"}><Empty>Nessuna partita di lega in questa giornata (calendario non importato o giornata di riposo).</Empty></Card>;
 
   const selectedHome = Number(params.get("partita")) || myMatch(calendar.data, md!, s?.myTeamId)?.home_team_id || matches[0].home_team_id;
   const match = matches.find((m) => m.home_team_id === selectedHome) ?? matches[0];
@@ -38,8 +38,12 @@ export function LivePage() {
   const names = new Map(data.teams.map((t) => [t.id, t.name]));
   const isMine = match.home_team_id === s?.myTeamId || match.away_team_id === s?.myTeamId;
 
+  const select = (homeId: number) => { setParams({ partita: String(homeId) }); window.scrollTo({ top: 0, behavior: "smooth" }); };
+
   return (
     <div className="flex flex-col gap-4">
+      <h1 className="scoreboard text-2xl leading-none">{started ? "Live" : "Altre formazioni"}</h1>
+      {!started && <p className="-mt-2 text-xs text-muted">Le formazioni delle altre squadre si vedono dal primo calcio d'inizio; fino ad allora qui vedi chi ha già inserito la sua. Il risultato è stimato con fantavoto 6 per chi deve giocare.</p>}
       <Scoreboard match={match} names={names} calc={current} simulate={simulate} phase={round.data!.phase} />
       {match.home_goals !== null && (
         <section className="rounded-xl border border-accent/40 bg-accent/10 p-3 text-sm">
@@ -48,23 +52,14 @@ export function LivePage() {
         </section>
       )}
 
-      <section className="shadow-card flex items-center justify-between gap-3 rounded-2xl bg-surface p-3">
-        <div className="min-w-0 text-xs text-muted">
-          {simulate
-            ? <>Risultato stimato con il regolamento della lega: chi deve ancora giocare vale fantavoto {SIM_DEFAULT_VOTE}{Object.keys(overrides).length ? ", con le tue ipotesi" : ""}.</>
-            : <>Parziale con i soli voti già arrivati: chi deve ancora giocare non conta.</>}
-          {" "}<button className="font-semibold text-accent underline" onClick={() => { setSimulate(!simulate); if (simulate) setOverrides({}); }}>{simulate ? "Solo voti arrivati" : "Risultato stimato"}</button>
-        </div>
-        {simulate && <Button variant="ghost" className="shrink-0" onClick={() => setEditing(true)}>Modifica voti</Button>}
-      </section>
+      <MatchDetail match={match} names={names} data={data} lineupOf={lineupOf} calc={current} outlook={outlook.data?.players} live={live.data} myTeamId={s?.myTeamId ?? null} started={started}
+        action={started ? <button className="text-xs font-semibold text-accent underline" onClick={() => setEditing(true)}>Modifica voti{Object.keys(overrides).length ? " ✓" : ""}</button> : null} />
 
       <ModsCard calc={current} names={names} match={match} />
 
-      {isMine && s?.myTeamId && (
+      {isMine && s?.myTeamId && started && (
         <Link to="/formazione" className="text-center text-sm font-semibold text-danger underline">Modifica formazione (giornata iniziata)</Link>
       )}
-
-      <TeamsPanel match={match} names={names} data={data} lineupOf={lineupOf} calc={current} outlook={outlook.data?.players} live={live.data} myTeamId={s?.myTeamId ?? null} />
 
       <Card title="Altri punteggi">
         <ul className="flex flex-col divide-y divide-line">
@@ -74,7 +69,7 @@ export function LivePage() {
             const ap = r.result?.away.final ?? r.away?.score.total ?? null;
             return (
               <li key={m.home_team_id}>
-                <button onClick={() => setParams({ partita: String(m.home_team_id) })} className="grid w-full grid-cols-[1fr_auto_1fr] items-center gap-2 py-2.5 text-left text-sm">
+                <button onClick={() => select(m.home_team_id)} className="grid w-full grid-cols-[1fr_auto_1fr] items-center gap-2 py-2.5 text-left text-sm" aria-label={`Dettaglio ${names.get(m.home_team_id)} – ${names.get(m.away_team_id)}`}>
                   <span className="truncate">{names.get(m.home_team_id)}{!r.home && <span className="block text-[10px] text-danger">formazione mancante</span>}</span>
                   <span className="tabular text-center">
                     {r.result ? <><b className="scoreboard text-lg">{r.result.goals[0]}-{r.result.goals[1]}</b><span className="block text-[10px] text-muted">{fmt(hp)} – {fmt(ap)}</span></> : <span className="text-[10px] text-muted">{hp !== null ? fmt(hp) : ""} – {ap !== null ? fmt(ap) : ""}</span>}
@@ -85,7 +80,7 @@ export function LivePage() {
             );
           })}
         </ul>
-        <p className="mt-2 text-[11px] text-muted">{simulate ? "Risultati stimati (chi deve ancora giocare vale 6)." : "Punteggi parziali con i voti già arrivati."} Voti stimati da FootballLite: non sono i voti ufficiali. I risultati ufficiali compaiono quando l'admin reimporta il calendario da Leghe Fantacalcio{calendar.importedAt ? ` (ultimo import: ${new Date(calendar.importedAt).toLocaleString("it-IT", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })})` : ""}.</p>
+        <p className="mt-2 text-[11px] text-muted">Tocca una partita per il dettaglio delle due formazioni. Risultati stimati (chi deve ancora giocare vale 6). Voti stimati da FootballLite: non sono i voti ufficiali. I risultati ufficiali compaiono quando l'admin reimporta il calendario da Leghe Fantacalcio{calendar.importedAt ? ` (ultimo import: ${new Date(calendar.importedAt).toLocaleString("it-IT", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })})` : ""}.</p>
       </Card>
 
       {editing && (
@@ -103,7 +98,7 @@ function Scoreboard({ match, names, calc, simulate, phase }: { match: CalendarRo
     <section className="hero rounded-2xl p-5 text-chalk" aria-label="Tabellone">
       <div className="mb-3 flex items-baseline justify-between text-xs text-chalk/70">
         <span>{match.league_day}ª giornata di lega</span>
-        <span>{phase === "live" ? (simulate ? "Live · risultato stimato" : "Live · parziale") : phase === "finished" ? "Finale stimato" : simulate ? "Risultato stimato" : "Da giocare"}</span>
+        <span>{phase === "live" ? "Live · risultato stimato" : phase === "finished" ? "Finale stimato" : "Da giocare · stima"}</span>
       </div>
       <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-3 text-center">
         <Side id={match.home_team_id} name={names.get(match.home_team_id) ?? ""} />
@@ -149,83 +144,77 @@ function ModsCard({ calc, names, match }: { calc: MatchCalc; names: Map<number, 
   );
 }
 
-function TeamsPanel({ match, names, data, lineupOf, calc, outlook, live, myTeamId }: {
+/**
+ * Dettaglio della partita: i giocatori delle due squadre in verticale, su due colonne nello stesso contenitore,
+ * con il fantavoto (live o ipotetico 6 per chi deve giocare) e la titolarità stimata.
+ */
+function MatchDetail({ match, names, data, lineupOf, calc, outlook, live, myTeamId, started, action }: {
   match: CalendarRow; names: Map<number, string>; data: LeagueData; lineupOf: (t: number) => Lineup | undefined;
-  calc: MatchCalc; outlook?: Record<string, Outlook>; live?: LiveData; myTeamId: number | null;
+  calc: MatchCalc; outlook?: Record<string, Outlook>; live?: LiveData; myTeamId: number | null; started: boolean; action?: React.ReactNode;
 }) {
-  const [side, setSide] = useState<"home" | "away">("home");
-  const tid = side === "home" ? match.home_team_id : match.away_team_id;
-  const lineup = lineupOf(tid);
-  const t = side === "home" ? calc.home : calc.away;
-  const roster = new Map(rosterOf(data, tid).map((p) => [String(p.slot), p]));
-  const subsIn = new Set(t?.score.substitutions.map((x) => x.in).filter((x): x is string => !!x));
-  const office = new Set(t?.score.counted.filter((p) => p.state === "office").map((p) => p.id));
-  const subsOut = new Set(t?.score.substitutions.filter((x) => x.in).map((x) => x.out));
-
-  const row = (p: Named) => {
-    const info = roster.get(p.id);
-    const o = info?.ext_id ? outlook?.[info.ext_id] : undefined;
-    const ev = info?.ext_id ? live?.events[info.ext_id] : undefined;
-    const tags = ev ? [
-      ...Array(ev.goals + ev.penaltyScored).fill("⚽"), ...Array(ev.assists).fill("assist"), ...Array(ev.yellow).fill("🟨"), ...Array(ev.red).fill("🟥"),
-      ...Array(ev.ownGoals).fill("autogol"), ...Array(ev.penaltyMissed).fill("rig. sbagliato"), ...Array(ev.penaltySaved).fill("rig. parato"),
-    ] : [];
-    const isCaptain = t?.score.captainId === p.id;
-    return (
-      <li key={p.id} className={`flex items-center gap-2 py-1.5 ${subsOut.has(p.id) ? "opacity-50" : ""}`}>
-        <RoleTag role={p.role} />
-        <div className="min-w-0 flex-1">
-          <div className="truncate text-sm">
-            {p.name}{isCaptain && <span className="ml-1 rounded bg-card px-1 text-[10px] font-bold text-card-ink">C</span>}
-            {subsIn.has(p.id) && <span className="text-[10px] text-accent"> entra</span>}
-            {subsOut.has(p.id) && <span className="text-[10px] text-danger"> esce</span>}
-            {office.has(p.id) && <span className="text-[10px] text-muted"> voto d'ufficio</span>}
-          </div>
-          <div className="truncate text-[11px] text-muted">{tags.join(" ") || o?.opponent || ""}</div>
-        </div>
-        {p.state === "pending" ? (
-          <span className="flex items-center gap-2"><StarterPercent percent={o?.starterPercent} /><span className="tabular text-sm text-muted">{p.fantavote !== null ? `${fmt(p.fantavote)}*` : "–"}</span></span>
-        ) : (
-          <span className="text-right tabular">
-            <span className="block text-sm font-bold">{p.state === "absent" ? "s.v." : fmt(p.fantavote)}</span>
-            {p.vote !== null && <span className="block text-[10px] text-muted">voto {fmt(p.vote)}{p.bonus ? ` ${p.bonus > 0 ? "+" : ""}${fmt(p.bonus)}` : ""}</span>}
+  const column = (tid: number, t: TeamCalc | null) => {
+    const lineup = lineupOf(tid);
+    const roster = new Map(rosterOf(data, tid).map((p) => [String(p.slot), p]));
+    const subsIn = new Set(t?.score.substitutions.map((x) => x.in).filter((x): x is string => !!x));
+    const subsOut = new Set(t?.score.substitutions.filter((x) => x.in).map((x) => x.out));
+    const row = (p: Named, i?: number) => {
+      const info = roster.get(p.id);
+      const o = info?.ext_id ? outlook?.[info.ext_id] : undefined;
+      const ev = info?.ext_id ? live?.events[info.ext_id] : undefined;
+      const tags = ev ? [...Array(ev.goals + ev.penaltyScored).fill("⚽"), ...Array(ev.assists).fill("A"), ...Array(ev.yellow).fill("🟨"), ...Array(ev.red).fill("🟥"), ...Array(ev.ownGoals).fill("AG")] : [];
+      const isCaptain = t?.score.captainId === p.id;
+      return (
+        <li key={p.id} className={`flex items-center gap-1.5 py-1 ${subsOut.has(p.id) ? "opacity-50" : ""}`}>
+          {i !== undefined && <span className="w-3 shrink-0 text-[10px] text-muted tabular">{i + 1}</span>}
+          <RoleTag role={p.role} size={14} />
+          <span className="min-w-0 flex-1">
+            <span className="block truncate text-[13px] font-semibold leading-tight">
+              {p.name}{isCaptain && <span className="ml-1 rounded bg-card px-1 text-[9px] font-extrabold text-card-ink">C</span>}
+              {subsIn.has(p.id) && <span className="text-[9px] text-accent"> ↑</span>}{subsOut.has(p.id) && <span className="text-[9px] text-danger"> ↓</span>}
+            </span>
+            {tags.length > 0 && <span className="block truncate text-[10px] leading-tight text-muted">{tags.join(" ")}</span>}
           </span>
-        )}
-      </li>
+          <span className="flex shrink-0 items-center gap-1">
+            <StarterPercent percent={o?.starterPercent} />
+            <span className={`w-8 text-right text-[13px] tabular ${p.state === "pending" ? "text-muted" : "font-bold"}`}>{p.state === "absent" ? "s.v." : p.fantavote !== null ? fmt(p.fantavote) : "–"}</span>
+          </span>
+        </li>
+      );
+    };
+    const head = (
+      <div className="mb-1 flex items-center gap-2 border-b border-line pb-1.5">
+        <TeamBadge id={tid} name={names.get(tid) ?? ""} size={24} />
+        <span className="min-w-0 flex-1 truncate text-sm font-extrabold">{names.get(tid)}</span>
+        {t && <span className="scoreboard tabular text-base">{fmt(t.score.total)}</span>}
+      </div>
+    );
+    if (!lineup) {
+      return (
+        <div className="min-w-0">{head}
+          <p className="py-3 text-xs text-muted">Formazione non inserita.</p>
+          {myTeamId && started && <Link to={tid === myTeamId ? "/formazione" : `/formazione?squadra=${tid}`} className="text-xs font-semibold text-accent underline">{tid === myTeamId ? "Inserisci la tua" : "Inseriscila tu"}</Link>}
+        </div>
+      );
+    }
+    if (lineup.hidden || !t) return <div className="min-w-0">{head}<p className="py-3 text-xs text-muted">Formazione inserita: visibile dal primo calcio d'inizio.</p></div>;
+    return (
+      <div className="min-w-0">
+        {head}
+        <p className="mb-1 text-[10px] font-bold uppercase tracking-wide text-muted">Titolari {lineup.module.split("").join("-")}</p>
+        <ul className="divide-y divide-line">{t.starters.map((p) => row(p))}</ul>
+        <p className="mt-2 mb-1 text-[10px] font-bold uppercase tracking-wide text-muted">Panchina</p>
+        <ol className="divide-y divide-line">{t.bench.map((p, i) => row(p, i))}</ol>
+        {lineup.recovered && <p className="mt-1 text-[10px] text-muted">Ultima formazione inserita (regola della lega).</p>}
+        {lineup.entered_by && !lineup.recovered && <p className="mt-1 text-[10px] text-muted">Inserita da {names.get(lineup.entered_by) ?? "un altro utente"}.</p>}
+        {lineup.forced && !lineup.entered_by && <p className="mt-1 text-[10px] text-danger">Modificata a giornata iniziata.</p>}
+      </div>
     );
   };
-
   return (
-    <div className="flex flex-col gap-3">
-      <Tabs value={side} onChange={setSide} items={[{ value: "home", label: names.get(match.home_team_id) ?? "Casa" }, { value: "away", label: names.get(match.away_team_id) ?? "Trasferta" }]} />
-      {!lineup ? (
-        <Card>
-          <Empty>{names.get(tid)} non ha inserito la formazione: per questa partita non c'è un risultato.</Empty>
-          {myTeamId && (
-            <Link to={tid === myTeamId ? "/formazione" : `/formazione?squadra=${tid}`} className="block">
-              <Button variant="ghost" className="w-full">{tid === myTeamId ? "Inserisci la tua formazione" : `Inserisci tu la formazione di ${names.get(tid)}`}</Button>
-            </Link>
-          )}
-        </Card>
-      ) : lineup.hidden || !t ? <Card><Empty>Formazione visibile dal primo calcio d'inizio.</Empty></Card> : (
-        <>
-          {lineup.recovered && <p className="text-xs text-muted">Formazione non inserita: si usa l'ultima inserita, come da regolamento.</p>}
-          {lineup.entered_by && !lineup.recovered && (
-            <p className="text-xs text-muted">Formazione inserita da {names.get(lineup.entered_by) ?? "un altro utente"}.{" "}
-              {myTeamId && <Link to={tid === myTeamId ? "/formazione" : `/formazione?squadra=${tid}`} className="underline">{tid === myTeamId ? "Sostituiscila con la tua" : "Correggila"}</Link>}
-            </p>
-          )}
-          {lineup.forced && !lineup.entered_by && (
-            <p className="text-xs text-danger">Formazione modificata a giornata iniziata ({new Date(lineup.created_at).toLocaleString("it-IT", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}).</p>
-          )}
-          <Card title={`Titolari ${lineup.module.split("").join("-")}`} action={<span className="scoreboard tabular text-xl">{fmt(t.score.base)}</span>}>
-            <ul className="divide-y divide-line">{t.starters.map(row)}</ul>
-          </Card>
-          <Card title="Panchina"><ul className="divide-y divide-line">{t.bench.map(row)}</ul></Card>
-          <p className="text-[11px] text-muted">* Da giocare: in simulazione vale il fantavoto ipotetico. A fianco la titolarità stimata.</p>
-        </>
-      )}
-    </div>
+    <Card title="Formazioni" action={action}>
+      <div className="grid grid-cols-2 gap-3">{column(match.home_team_id, calc.home)}{column(match.away_team_id, calc.away)}</div>
+      <p className="mt-2 text-[11px] text-muted">Voto: fantavoto live, oppure 6 ipotetico per chi deve ancora giocare. Accanto la titolarità stimata. ↑ entra, ↓ esce.</p>
+    </Card>
   );
 }
 

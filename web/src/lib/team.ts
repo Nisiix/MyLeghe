@@ -104,6 +104,35 @@ export function newsSearchUrl(playerName: string): string {
 }
 
 /** Stato del giocatore per la prossima partita, in parole (indisponibile, in dubbio, probabile/ufficiale). */
+/** Squadre di Serie A e B con il nome breve usato nell'app (ordine: i nomi contenuti in altri vengono dopo). */
+const TEAM_SHORT = [
+  "Inter", "Milan", "Juventus", "Napoli", "Roma", "Lazio", "Atalanta", "Fiorentina", "Bologna", "Torino", "Udinese", "Genoa",
+  "Cagliari", "Verona", "Lecce", "Parma", "Como", "Sassuolo", "Cremonese", "Pisa", "Empoli", "Monza", "Venezia", "Salernitana",
+  "Frosinone", "Sampdoria", "Spezia", "Brescia", "Palermo", "Bari", "Catanzaro", "Cesena", "Modena", "Reggiana", "Carrarese",
+  "Cittadella", "Juve Stabia", "Mantova", "Cosenza", "Pescara", "Avellino", "Padova", "Entella", "Sudtirol",
+];
+
+/** Nome della squadra di Serie A ripulito (via sigle, anni e caratteri strani): «Hellas Verona FC» → «Verona». */
+export function prettyTeam(raw?: string | null): string {
+  if (!raw) return "";
+  const clean = raw.normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^A-Za-z0-9 ]+/g, " ").replace(/\s+/g, " ").trim();
+  const low = clean.toLowerCase();
+  const hit = TEAM_SHORT.find((t) => low.includes(t.toLowerCase()));
+  if (hit) return hit;
+  const words = clean.split(" ").filter((w) => !/^(fc|ac|as|ss|ssc|us|uc|sc|calcio|hellas|\d{4})$/i.test(w));
+  return words.map((w) => w[0].toUpperCase() + w.slice(1).toLowerCase()).join(" ") || clean;
+}
+
+/** Solo la disponibilità (infortunio, squalifica, dubbio): la probabilità di giocare è già nella percentuale di titolarità. */
+export function availabilityText(o?: Outlook): string {
+  if (!o) return "Non abbinato alla fonte dati";
+  if (o.unavailable === "injury") return "Infortunato";
+  if (o.unavailable === "suspension") return "Squalificato";
+  if (o.unavailable) return "Indisponibile";
+  if (o.doubtful) return "In dubbio";
+  return "";
+}
+
 export function outlookStatus(o?: Outlook): string {
   if (!o) return "Non abbinato alla fonte dati";
   if (o.unavailable === "injury") return "Infortunato";

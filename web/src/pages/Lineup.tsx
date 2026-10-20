@@ -1,12 +1,12 @@
 import { moduleShape, orderBench, parseLineupText, ROLE_NAME, ROLES, suggestLineup, validateLineup, type LeagueConfig, type ScoredPlayer } from "@footballlite/core";
 import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Link, useSearchParams } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { Button, Card, Empty, ErrorBox, RoleTag, Sheet, Shirt, Spinner, StarterPercent, fmt, formatCountdown, useNow } from "../components/ui";
 import { api, ApiError } from "../lib/api";
 import { useLeague, useLineups, useOutlook, useRound, type Lineup, type Outlook, type RosterPlayer } from "../lib/data";
 import { useSession } from "../lib/session";
-import { newsSearchUrl, outlookStatus as statusText, rosterOf, scoredRoster } from "../lib/team";
+import { availabilityText as statusText, newsSearchUrl, prettyTeam, rosterOf, scoredRoster } from "../lib/team";
 
 type Row = ScoredPlayer & { info: RosterPlayer; outlook?: Outlook };
 
@@ -47,8 +47,8 @@ export function LineupPage() {
 }
 
 type Snapshot = { module: string; starters: string[]; bench: string[]; captain: string | null; vice: string | null; message: { ok: boolean; text: string } | null };
-/** Slot vuoto toccato: del campo (con il ruolo) o della panchina. */
-type Picking = { role: number; target: "starters" | "bench" };
+/** Slot vuoto toccato (campo con il ruolo, o panchina) oppure titolare da sostituire (`replace`). */
+type Picking = { role: number; target: "starters" | "bench"; replace?: string };
 type Candidate = { id: number; name: string; team_name: string; role?: number | null };
 /** Gestori del trascinamento (dito o mouse) e del tocco su un giocatore. */
 type Grab = { onPointerDown: (e: React.PointerEvent) => void; onClick: (e: React.MouseEvent) => void; onContextMenu: (e: React.MouseEvent) => void };
@@ -68,6 +68,7 @@ function Editor({ teamId, proxyName, round, deadline, started, scored, cfg, curr
   savedMessage: string | null; onSaved: (text: string | null) => void;
 }) {
   const qc = useQueryClient();
+  const navigate = useNavigate();
   const byId = useMemo(() => new Map(scored.map((p) => [p.id, p])), [scored]);
   /**
    * Formazione di partenza: quella salvata per la giornata; altrimenti l'ultima inserita (giocatori ancora in rosa);
@@ -413,6 +414,11 @@ function Editor({ teamId, proxyName, round, deadline, started, scored, cfg, curr
    */
   function pick(id: string) {
     if (!picking) return;
+    if (picking.replace) {
+      // Il titolare toccato esce al posto del giocatore scelto: se quello era in panchina, i due si scambiano.
+      const p = byId.get(id);
+      if (p) { toField(p, picking.replace); setPicking(null); return; }
+    }
     if (picking.target === "starters") {
       setStarters([...starters, id]);
       setBench(bench.filter((x) => x !== id));
@@ -450,9 +456,10 @@ function Editor({ teamId, proxyName, round, deadline, started, scored, cfg, curr
       await api(`/league/lineups/${round}/${teamId}`, { method: "PUT", body: { module, starters: starters.map(Number), bench: bench.map(Number), captain: captainOn && captain ? Number(captain) : null, vice: captainOn && vice ? Number(vice) : null, forced: forced || !!proxyName } });
       const text = proxyName ? `Formazione di ${proxyName} inserita: risulterà inserita da te.` : forced ? "Formazione modificata a giornata iniziata: la modifica è visibile a tutta la lega." : "Formazione salvata.";
       onSaved(text);
-      setMessage({ ok: true, text });
       setConfirmForce(false);
       await qc.invalidateQueries({ queryKey: ["lineups"] });
+      // Salvata: si torna alla Home, dove il tabellone conferma «Formazione inserita».
+      navigate("/", { replace: true });
     } catch (e) {
       if (e instanceof ApiError && e.body?.needsForce) setConfirmForce(true);
       else setMessage({ ok: false, text: (e as Error).message });
@@ -463,7 +470,13 @@ function Editor({ teamId, proxyName, round, deadline, started, scored, cfg, curr
 
   const rows = [4, 3, 2, 1].map((role) => ({ role, players: startersOf(role), empty: Math.max(0, want[role] - startersOf(role).length) }));
   const byRoleScore = (a: Row, b: Row) => a.role - b.role || b.score - a.score;
-  const pickGroups: { title: string; hint: string; players: Row[] }[] = !picking ? [] : picking.target === "starters"
+  const replacing = picking?.replace ? byId.get(picking.replace) : undefined;
+  const pickGroups: { title: string; hint: string; players: Row[] }[] = !picking ? [] : picking.replace
+    ? [
+      { title: "In panchina", hint: "Entra al posto suo, lui va in panchina", players: benchRows.filter((p) => p.role === picking.role).sort(byRoleScore) },
+      { title: "Riserve", hint: "Entra al posto suo, lui torna tra le riserve", players: free.filter((p) => p.role === picking.role).sort(byRoleScore) },
+    ]
+    : picking.target === "starters"
     ? [
       { title: "Riserve", hint: "Entra in campo", players: free.filter((p) => p.role === picking.role).sort(byRoleScore) },
       { title: "In panchina", hint: "Da panchinaro a titolare", players: benchRows.filter((p) => p.role === picking.role).sort(byRoleScore) },
@@ -495,7 +508,7 @@ function Editor({ teamId, proxyName, round, deadline, started, scored, cfg, curr
             <RoleTag role={p.role} size={16} />{p.name}
             {badgeOf(p.id) && <span className="rounded bg-card px-1 text-[10px] font-extrabold text-card-ink">{badgeOf(p.id)}</span>}
           </span>
-          <span className="block truncate text-xs text-muted">{[p.info.ext_team, p.outlook?.opponent ? `vs ${p.outlook.opponent}` : null, statusText(p.outlook)].filter(Boolean).join(" · ")}</span>
+          <span className="block truncate text-xs text-muted">{[prettyTeam(p.info.ext_team), statusText(p.outlook)].filter(Boolean).join(" · ")}</span>
         </span>
       </button>
       {!p.info.ext_id && canMatch ? <MatchButton name={p.name} onClick={() => openSheet(p.id)} /> : <StarterPercent percent={p.starterPercent} />}
@@ -517,6 +530,9 @@ function Editor({ teamId, proxyName, round, deadline, started, scored, cfg, curr
           </div>
         </div>
         <div className="mt-3 flex gap-2">
+          <Link to="/live" className="flex flex-1 items-center justify-center gap-1.5 rounded-full border border-white/50 px-2 py-2 text-sm font-bold hover:bg-white/10">
+            {started && <span className="size-2 animate-pulse rounded-full bg-danger" aria-hidden />}{started ? "Live" : "Altre formazioni"}
+          </Link>
           <button onClick={() => { setPasting(true); setPasteError(null); }} className="flex-1 rounded-full border border-white/50 px-2 py-2 text-sm font-bold hover:bg-white/10">Importa rosa</button>
           <button type="button" aria-pressed={!!suggested} onClick={toggleSuggestion}
             className={`flex flex-1 items-center justify-center gap-1.5 rounded-full border px-2 py-2 text-sm font-bold transition ${suggested ? "border-card bg-card text-card-ink" : "border-white/50 hover:bg-white/10"}`}>
@@ -563,7 +579,7 @@ function Editor({ teamId, proxyName, round, deadline, started, scored, cfg, curr
         {rows.map((r) => (
           <div key={r.role} className="flex justify-center gap-1">
             {r.players.map((p) => (
-              <PitchPlayer key={p.id} p={p} badge={badgeOf(p.id)} hot={over === `s:${p.id}`} lifted={drag?.id === p.id} handlers={grab(p.id, () => openSheet(p.id))} />
+              <PitchPlayer key={p.id} p={p} badge={badgeOf(p.id)} hot={over === `s:${p.id}`} lifted={drag?.id === p.id} handlers={grab(p.id, () => setPicking({ role: p.role, target: "starters", replace: p.id }))} />
             ))}
             {Array.from({ length: r.empty }, (_, i) => (
               <EmptySlot key={`e${i}`} role={r.role} hot={over === `slot:${r.role}`} onClick={() => setPicking({ role: r.role, target: "starters" })} />
@@ -571,7 +587,7 @@ function Editor({ teamId, proxyName, round, deadline, started, scored, cfg, curr
           </div>
         ))}
       </div>
-      <p className="px-4 pt-1.5 pb-3 text-[11px] text-muted">Tocca un giocatore per spostarlo (titolare, panchina o riserve) o uno slot vuoto per sceglierlo; puoi anche trascinarlo sul posto di un altro.</p>
+      <p className="px-4 pt-1.5 pb-3 text-[11px] text-muted">Tocca un titolare per sostituirlo con un panchinaro o una riserva, uno slot vuoto per scegliere chi schierare; puoi anche trascinare un giocatore sul posto di un altro.</p>
 
       <div className="flex flex-col gap-3 px-3 pb-3 empty:hidden">
         {captainOn && (
@@ -673,7 +689,7 @@ function Editor({ teamId, proxyName, round, deadline, started, scored, cfg, curr
               <div className="flex items-center gap-3">
                 <Shirt name={acting.name} role={acting.role} size={52} />
                 <div className="min-w-0 flex-1 text-sm">
-                  <p className="font-semibold">{[ROLE_NAME[acting.role].replace(/i$/, "e").replace("Centrocampiste", "Centrocampista"), acting.info.ext_team, acting.outlook?.opponent ? `vs ${acting.outlook.opponent}` : null].filter(Boolean).join(" · ")}</p>
+                  <p className="font-semibold">{[SINGULAR[acting.role][0].toUpperCase() + SINGULAR[acting.role].slice(1), prettyTeam(acting.info.ext_team)].filter(Boolean).join(" · ")}</p>
                   <p className="text-xs text-muted">{[statusText(acting.outlook), `FM stimata ${fmt(acting.expectedFantavote, 2)}`].filter(Boolean).join(" · ")}</p>
                   <p className="mt-1 flex items-center gap-2 text-xs"><span className="rounded-full bg-surface-2 px-2 py-0.5 font-bold">{at === "field" ? "Titolare" : at === "bench" ? `In panchina (${bench.indexOf(acting.id) + 1})` : "Riserva"}</span><StarterPercent percent={acting.starterPercent} /></p>
                 </div>
@@ -694,7 +710,7 @@ function Editor({ teamId, proxyName, round, deadline, started, scored, cfg, curr
                       <li key={x.id}>
                         <button onClick={() => (choose === "field" ? toField(acting, x.id) : toBenchSpot(acting, x.id))} className="flex w-full items-center gap-3 rounded-lg px-2 py-1.5 text-left hover:bg-surface-2">
                           <Shirt name={x.name} role={x.role} size={32} />
-                          <span className="min-w-0 flex-1"><span className="block truncate text-sm font-bold">{x.name}</span><span className="block truncate text-xs text-muted">{choose === "bench" ? `Panchina ${bench.indexOf(x.id) + 1} · ` : ""}{[x.info.ext_team, x.outlook?.opponent ? `vs ${x.outlook.opponent}` : null].filter(Boolean).join(" · ")}</span></span>
+                          <span className="min-w-0 flex-1"><span className="block truncate text-sm font-bold">{x.name}</span><span className="block truncate text-xs text-muted">{choose === "bench" ? `Panchina ${bench.indexOf(x.id) + 1} · ` : ""}{prettyTeam(x.info.ext_team)}</span></span>
                           <StarterPercent percent={x.starterPercent} />
                         </button>
                       </li>
@@ -727,8 +743,22 @@ function Editor({ teamId, proxyName, round, deadline, started, scored, cfg, curr
         })()}
       </Sheet>
 
-      <Sheet open={!!picking} onClose={() => setPicking(null)} title={picking?.target === "bench" ? `Posto ${bench.length + 1} in panchina` : `Slot ${picking ? SINGULAR[picking.role] ?? "" : ""}`}>
-        {pickGroups.every((g) => !g.players.length) && <Empty>Nessun giocatore disponibile per questo slot.</Empty>}
+      <Sheet open={!!picking} onClose={() => setPicking(null)} title={replacing ? `Sostituisci ${replacing.name}` : picking?.target === "bench" ? `Posto ${bench.length + 1} in panchina` : `Slot ${picking ? SINGULAR[picking.role] ?? "" : ""}`}>
+        {replacing && (
+          <div className="mb-3 flex items-center gap-3 rounded-xl border border-line bg-surface-2 p-3">
+            <Shirt name={replacing.name} role={replacing.role} size={40} />
+            <div className="min-w-0 flex-1 text-sm">
+              <p className="truncate font-semibold">{[SINGULAR[replacing.role][0].toUpperCase() + SINGULAR[replacing.role].slice(1), prettyTeam(replacing.info.ext_team), statusText(replacing.outlook)].filter(Boolean).join(" · ")}</p>
+              <p className="mt-1 flex flex-wrap gap-2 text-xs">
+                <button className="rounded-full border border-line px-2 py-0.5 font-semibold" onClick={() => { setPicking(null); benchRoomFor(replacing.role) ? toBenchSpot(replacing) : openSheet(replacing.id); }}>In panchina</button>
+                <button className="rounded-full border border-line px-2 py-0.5 font-semibold" onClick={() => { setPicking(null); toReserves(replacing); }}>Tra le riserve</button>
+                {!replacing.info.ext_id && canMatch && <button className="rounded-full border border-warn/60 bg-card/20 px-2 py-0.5 font-semibold" onClick={() => { setPicking(null); openSheet(replacing.id); }}>Abbina alla fonte</button>}
+              </p>
+            </div>
+            <StarterPercent percent={replacing.starterPercent} />
+          </div>
+        )}
+        {pickGroups.every((g) => !g.players.length) && <Empty>{replacing ? "Nessun panchinaro o riserva di questo ruolo." : "Nessun giocatore disponibile per questo slot."}</Empty>}
         {pickGroups.filter((g) => g.players.length).map((g) => (
           <section key={g.title} className="mb-3">
             <h3 className="mb-1.5 flex items-baseline justify-between text-xs font-bold uppercase tracking-wide text-muted">{g.title}<span className="font-semibold normal-case tracking-normal">{g.hint}</span></h3>
@@ -742,7 +772,7 @@ function Editor({ teamId, proxyName, round, deadline, started, scored, cfg, curr
                         {p.name}
                         {stateOf(p.id) && <span className="rounded bg-line px-1 text-[10px] font-bold text-muted">{stateOf(p.id)}</span>}
                       </div>
-                      <div className="truncate text-xs text-muted">{[p.info.ext_team, p.outlook?.opponent ? `vs ${p.outlook.opponent}` : null, statusText(p.outlook), `FM ${fmt(p.expectedFantavote, 2)}`].filter(Boolean).join(" · ")}</div>
+                      <div className="truncate text-xs text-muted">{[prettyTeam(p.info.ext_team), statusText(p.outlook), `FM ${fmt(p.expectedFantavote, 2)}`].filter(Boolean).join(" · ")}</div>
                     </div>
                     <StarterPercent percent={p.starterPercent} />
                   </button>
@@ -809,9 +839,8 @@ function PitchPlayer({ p, badge, hot, lifted, handlers }: { p: Row; badge: "C" |
         {low && <span className="absolute -left-1 -top-1 size-3 rounded-full border-2 border-white bg-danger" title="Titolarità sotto il 70%" />}
       </span>
       <span className="-mt-0.5 w-full truncate rounded bg-white px-1 text-[11px] font-extrabold leading-[18px] text-[#13203b] shadow">{p.name}</span>
-      <span className="mt-0.5 flex items-center gap-1 text-[10px] font-semibold leading-3 text-white">
+      <span className="mt-0.5 flex items-center text-[10px] font-semibold leading-3 text-white">
         <StarterPercent percent={p.starterPercent} />
-        <span className="max-w-[40px] truncate">{p.outlook?.opponent ? `vs ${p.outlook.opponent}` : ""}</span>
       </span>
     </button>
   );

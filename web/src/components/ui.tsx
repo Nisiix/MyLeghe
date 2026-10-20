@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { initials } from "../lib/api";
 
 export function Card({ title, action, children, className = "" }: { title?: ReactNode; action?: ReactNode; children: ReactNode; className?: string }) {
@@ -121,24 +121,36 @@ export function Tabs<T extends string>({ value, onChange, items }: { value: T; o
 }
 
 export function Sheet({ open, onClose, title, children }: { open: boolean; onClose: () => void; title: string; children: ReactNode }) {
+  // Trascinando verso il basso la maniglia o il titolo il foglio si chiude; il contenuto scorre da solo.
+  const [dy, setDy] = useState(0);
+  const startY = useRef<number | null>(null);
   useEffect(() => {
-    if (!open) return;
+    if (!open) { setDy(0); startY.current = null; return; }
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [open, onClose]);
   if (!open) return null;
+  const onStart = (e: React.TouchEvent) => { startY.current = e.touches[0].clientY; };
+  const onMove = (e: React.TouchEvent) => { if (startY.current !== null) setDy(Math.max(0, e.touches[0].clientY - startY.current)); };
+  const onEnd = () => { const close = dy > 90; setDy(0); startY.current = null; if (close) onClose(); };
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/60" onClick={onClose}>
       <div
         role="dialog"
         aria-label={title}
-        className="w-full max-w-lg max-h-[85vh] overflow-y-auto rounded-t-3xl bg-surface border-t border-line p-4 safe-bottom"
+        className="flex max-h-[88vh] w-full max-w-lg flex-col rounded-t-3xl border-t border-line bg-surface safe-bottom"
+        style={{ transform: dy ? `translateY(${dy}px)` : undefined, transition: dy ? "none" : "transform 0.2s" }}
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-line" />
-        <h2 className="mb-3 text-lg font-extrabold">{title}</h2>
-        {children}
+        <div className="shrink-0 touch-none px-4 pt-3 pb-2" onTouchStart={onStart} onTouchMove={onMove} onTouchEnd={onEnd} onTouchCancel={onEnd}>
+          <div className="mx-auto mb-3 h-1.5 w-10 rounded-full bg-line" />
+          <div className="flex items-center justify-between gap-3">
+            <h2 className="min-w-0 truncate text-lg font-extrabold">{title}</h2>
+            <button onClick={onClose} aria-label="Chiudi" className="shrink-0 rounded-full px-2 py-0.5 text-lg leading-none text-muted hover:bg-surface-2">✕</button>
+          </div>
+        </div>
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 pb-4">{children}</div>
       </div>
     </div>
   );

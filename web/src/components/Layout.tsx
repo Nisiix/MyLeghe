@@ -61,17 +61,15 @@ function LeagueMenu({ open, onClose }: { open: boolean; onClose: () => void }) {
   );
 }
 
-/** Barra in basso come nelle app di lega: Home, Formazione, Rose, Live. */
+/** Barra in basso: Home e Rose. Formazione e Live si aprono dalla Home (pulsante «Formazione») e dalla Formazione (pulsante «Live»). */
 function TabBar() {
   const items = [
     { to: "/", label: "Home", icon: "home", end: true },
-    { to: "/formazione", label: "Formazione", icon: "lineup" },
     { to: "/rose", label: "Rose", icon: "rosters" },
-    { to: "/live", label: "Live", icon: "live" },
   ];
   return (
     <nav aria-label="Sezioni" className="fixed inset-x-0 bottom-0 z-40 border-t border-line bg-surface safe-nav">
-      <ul className="mx-auto grid max-w-lg grid-cols-4">
+      <ul className="mx-auto grid max-w-lg grid-cols-2">
         {items.map((i) => (
           <li key={i.to}>
             <NavLink to={i.to} end={i.end}
@@ -129,7 +127,7 @@ export function Layout() {
   const navigate = useNavigate();
   const loc = useLocation();
   const myTeam = league.data?.teams.find((t) => t.id === s?.myTeamId);
-  const root = ["/", "/formazione", "/rose", "/live"].includes(loc.pathname);
+  const root = ["/", "/rose"].includes(loc.pathname);
   const [leagues, setLeagues] = useState(false);
   const [menu, setMenu] = useState(false);
   return (

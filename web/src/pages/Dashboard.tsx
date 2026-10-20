@@ -2,7 +2,7 @@ import { Link } from "react-router-dom";
 import { Button, Card, Empty, ErrorBox, RoleTag, Spinner, StarterPercent, TeamBadge, fmt, formatCountdown, useNow } from "../components/ui";
 import { useCalendar, useLeague, useLineups, useLive, useOutlook, useRound, type Round } from "../lib/data";
 import { useSession } from "../lib/session";
-import { leagueMatches, matchCalc, myMatch, rosterOf, scoredRoster, teamCalc } from "../lib/team";
+import { leagueMatches, matchCalc, myMatch, rosterOf, teamCalc } from "../lib/team";
 
 export function Dashboard() {
   const s = useSession();
@@ -23,7 +23,6 @@ export function Dashboard() {
   return (
     <div className="flex flex-col gap-4">
       <RoundCard round={round.data!} />
-      <MyLineupCard round={round.data!} />
       <LeagueDayCard round={round.data!} />
       <RiskCard />
       <SerieACard round={round.data!} />
@@ -76,10 +75,10 @@ function RoundCard({ round }: { round: Round }) {
             <p className="mt-3 text-xs text-chalk/80">Scegli il tuo utente nelle <Link to="/utente" className="underline">impostazioni utente</Link> per schierare.</p>
           )}
         </div>
-        {started ? (
-          <Link to="/live" className="block"><Button variant="card" className="w-full py-3 text-base">Visualizza live</Button></Link>
-        ) : s?.myTeamId ? (
-          <Link to="/formazione" className="block"><Button variant="card" className="w-full py-3 text-base">{myLineup ? "Modifica formazione" : "Inserisci formazione"}</Button></Link>
+        {s?.myTeamId ? (
+          <Link to="/formazione" className="block"><Button variant="card" className="w-full py-3 text-base">Formazione</Button></Link>
+        ) : started ? (
+          <Link to="/live" className="block"><Button variant="card" className="w-full py-3 text-base">Live</Button></Link>
         ) : null}
       </div>
     </section>
@@ -92,44 +91,6 @@ function TeamHead({ id, name }: { id: number; name: string }) {
       <TeamBadge id={id} name={name} size={44} />
       <span className="w-full truncate text-sm font-semibold">{name}</span>
     </div>
-  );
-}
-
-/** La formazione schierata per la giornata, con la titolarità stimata di ogni titolare. */
-function MyLineupCard({ round }: { round: Round }) {
-  const s = useSession();
-  const league = useLeague();
-  const outlook = useOutlook();
-  const lineups = useLineups(round.matchday);
-  if (!s?.myTeamId || !league.data) return null;
-  const lineup = lineups.data?.lineups.find((l) => l.team_id === s.myTeamId && !l.hidden);
-  if (!lineup) return null;
-  const roster = rosterOf(league.data, s.myTeamId);
-  const scored = new Map(scoredRoster(roster, outlook.data?.players, league.data.league.config).map((p) => [p.id, p]));
-  const starters = lineup.starters.map((id) => scored.get(String(id))).filter(Boolean);
-  const bench = lineup.bench.map((id) => scored.get(String(id))).filter(Boolean);
-  const low = starters.filter((p) => !Number.isNaN(p!.starterPercent) && p!.starterPercent < 50).length;
-  const row = (p: NonNullable<typeof starters[number]>, i?: number) => (
-    <li key={p.id} className="flex items-center gap-2 py-1.5 text-sm">
-      {i !== undefined && <span className="w-4 text-xs text-muted tabular">{i + 1}</span>}
-      <RoleTag role={p.role} />
-      <span className="flex-1 truncate">
-        {p.name}{lineup.captain != null && String(lineup.captain) === p.id && <span className="ml-1 rounded bg-card px-1 text-[10px] font-bold text-card-ink">C</span>}
-        {lineup.vice != null && String(lineup.vice) === p.id && <span className="ml-1 rounded bg-card px-1 text-[10px] font-bold text-card-ink">VC</span>}
-        <span className="text-xs text-muted"> {p.outlook?.opponent ?? ""}</span>
-      </span>
-      <StarterPercent percent={p.starterPercent} />
-    </li>
-  );
-  return (
-    <Card title={`La tua formazione · ${lineup.module.split("").join("-")}`} action={round.phase === "upcoming" ? <Link to="/formazione" className="text-sm font-semibold text-accent">Modifica</Link> : <Link to="/live" className="text-sm font-semibold text-accent">Live</Link>}>
-      <ul className="divide-y divide-line">{[4, 3, 2, 1].flatMap((role) => starters.filter((p) => p!.role === role).map((p) => row(p!)))}</ul>
-      <details className="mt-2 text-sm">
-        <summary className="cursor-pointer text-xs font-semibold text-muted">Panchina ({bench.length})</summary>
-        <ol className="divide-y divide-line">{bench.map((p, i) => row(p!, i))}</ol>
-      </details>
-      <p className="mt-2 text-[11px] text-muted">{low ? `${low} ${low === 1 ? "titolare a rischio" : "titolari a rischio"} (titolarità stimata sotto il 50%).` : "Titolarità stimata da FootballLite sotto ogni giocatore."}</p>
-    </Card>
   );
 }
 
@@ -179,7 +140,6 @@ function LeagueDayCard({ round }: { round: Round }) {
       </ul>
       {started && matches.some((m) => m.home_goals === null) && <p className="mt-2 text-[11px] text-muted">Risultati stimati da FootballLite: chi deve ancora giocare vale fantavoto 6. Tocca una partita per il dettaglio.</p>}
       {calendar.importedAt && <p className="mt-2 text-[11px] text-muted">Risultati ufficiali aggiornati all'import del calendario del {new Date(calendar.importedAt).toLocaleString("it-IT", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}.</p>}
-      {round.phase !== "upcoming" && <Link to="/live" className="mt-2 block text-center text-xs text-accent">Punteggi live e «Simula risultato»</Link>}
     </Card>
   );
 }
