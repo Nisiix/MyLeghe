@@ -80,8 +80,10 @@ export async function computeOutlook(env: Env, leagueId: string): Promise<{ matc
   for (const r of roster.results ?? []) {
     const st = statusBy.get(r.ext_id);
     const hist = histBy.get(r.ext_id) ?? [];
+    // Senza alcuna partita nello storico (fonte non ancora sincronizzata per lui) la titolarità recente è sconosciuta,
+    // non "mai titolare": la stima resta neutra invece di scendere a 0%.
     const recentStarts: boolean[] = [];
-    for (let md = info.matchday - 1; md >= Math.max(1, info.matchday - HISTORY_ROUNDS); md--) recentStarts.push(hist.some((h) => h.matchday === md && h.started === 1));
+    if (hist.length) for (let md = info.matchday - 1; md >= Math.max(1, info.matchday - HISTORY_ROUNDS); md--) recentStarts.push(hist.some((h) => h.matchday === md && h.started === 1));
     const played = hist.filter((h) => h.minutes > 0);
     const avgFantavote = played.length
       ? played.reduce((a, h) => a + fantavote(toEvents(h), r.role, cfg, true).fantavote, 0) / played.length

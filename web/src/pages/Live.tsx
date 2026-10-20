@@ -16,7 +16,9 @@ export function LivePage() {
   const live = useLive(md, round.data?.phase === "live");
   const outlook = useOutlook();
   const [params, setParams] = useSearchParams();
-  const [simulate, setSimulate] = useState(false);
+  // Il risultato stimato (chi deve ancora giocare vale 6) si vede subito, come «Simula risultato» di Leghe Fantacalcio;
+  // «Solo voti arrivati» mostra il parziale con i soli voti già disponibili.
+  const [simulate, setSimulate] = useState(true);
   const [overrides, setOverrides] = useState<SimOverrides>({});
   const [editing, setEditing] = useState(false);
 
@@ -46,18 +48,15 @@ export function LivePage() {
         </section>
       )}
 
-      {!simulate ? (
-        <section className="rounded-xl border border-line bg-surface p-4 text-center">
-          <h2 className="scoreboard text-xl">Simula il risultato finale</h2>
-          <p className="mb-3 mt-1 text-sm text-muted">Chi deve ancora giocare è ipotizzato presente con fantavoto {SIM_DEFAULT_VOTE}. Puoi simularne l'assenza o cambiarne voto e bonus/malus: il risultato segue il regolamento della lega.</p>
-          <Button variant="card" onClick={() => setSimulate(true)}>Simula risultato</Button>
-        </section>
-      ) : (
-        <div className="flex items-center justify-between gap-2">
-          <button className="text-sm text-accent underline" onClick={() => { setSimulate(false); setOverrides({}); }}>Torna al parziale</button>
-          <Button variant="ghost" onClick={() => setEditing(true)}>Modifica voti</Button>
+      <section className="flex items-center justify-between gap-3 rounded-xl border border-line bg-surface p-3">
+        <div className="min-w-0 text-xs text-muted">
+          {simulate
+            ? <>Risultato stimato con il regolamento della lega: chi deve ancora giocare vale fantavoto {SIM_DEFAULT_VOTE}{Object.keys(overrides).length ? ", con le tue ipotesi" : ""}.</>
+            : <>Parziale con i soli voti già arrivati: chi deve ancora giocare non conta.</>}
+          {" "}<button className="font-semibold text-accent underline" onClick={() => { setSimulate(!simulate); if (simulate) setOverrides({}); }}>{simulate ? "Solo voti arrivati" : "Risultato stimato"}</button>
         </div>
-      )}
+        {simulate && <Button variant="ghost" className="shrink-0" onClick={() => setEditing(true)}>Modifica voti</Button>}
+      </section>
 
       <ModsCard calc={current} names={names} match={match} />
 
@@ -86,7 +85,7 @@ export function LivePage() {
             );
           })}
         </ul>
-        <p className="mt-2 text-[11px] text-muted">{simulate ? "Risultati simulati." : "Punteggi parziali con i voti già arrivati."} Voti stimati da FootballLite su statistiche BSD: non sono i voti ufficiali. I risultati ufficiali compaiono quando l'admin reimporta il calendario da Leghe Fantacalcio{calendar.importedAt ? ` (ultimo import: ${new Date(calendar.importedAt).toLocaleString("it-IT", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })})` : ""}.</p>
+        <p className="mt-2 text-[11px] text-muted">{simulate ? "Risultati stimati (chi deve ancora giocare vale 6)." : "Punteggi parziali con i voti già arrivati."} Voti stimati da FootballLite su statistiche BSD: non sono i voti ufficiali. I risultati ufficiali compaiono quando l'admin reimporta il calendario da Leghe Fantacalcio{calendar.importedAt ? ` (ultimo import: ${new Date(calendar.importedAt).toLocaleString("it-IT", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })})` : ""}.</p>
       </Card>
 
       {editing && (
@@ -104,7 +103,7 @@ function Scoreboard({ match, names, calc, simulate, phase }: { match: CalendarRo
     <section className="rounded-2xl bg-pitch-deep p-5 text-chalk" aria-label="Tabellone">
       <div className="mb-3 flex items-baseline justify-between text-xs text-chalk/70">
         <span>{match.league_day}ª giornata di lega</span>
-        <span>{simulate ? "Risultato simulato" : phase === "live" ? "Live" : phase === "finished" ? "Finale stimato" : "Da giocare"}</span>
+        <span>{phase === "live" ? (simulate ? "Live · risultato stimato" : "Live · parziale") : phase === "finished" ? "Finale stimato" : simulate ? "Risultato stimato" : "Da giocare"}</span>
       </div>
       <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-3 text-center">
         <Side id={match.home_team_id} name={names.get(match.home_team_id) ?? ""} />
