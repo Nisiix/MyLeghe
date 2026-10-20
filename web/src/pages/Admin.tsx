@@ -1,4 +1,4 @@
-import { parseCalendarGrid, parseRosterGrid, type CalendarImport, type ImportResult, type LeagueConfig } from "@footballlite/core";
+import { MIN_CALIBRATION_SAMPLES, parseCalendarGrid, parseRosterGrid, type CalendarImport, type Calibration, type ImportResult, type LeagueConfig } from "@footballlite/core";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { RulesEditor } from "../components/RulesEditor";
@@ -128,6 +128,7 @@ function CalendarImportCard() {
       setDone(`Calendario importato: ${r.days} giornate, ${r.matches} partite, ${r.officialMatches} risultati ufficiali.`);
       setPreview(null);
       await qc.invalidateQueries({ queryKey: ["calendar"] });
+      await qc.invalidateQueries({ queryKey: ["calibration"] });
     } catch (e) { setError(e); }
   }
 
@@ -144,7 +145,22 @@ function CalendarImportCard() {
         </div>
       )}
       {done && <p className="mt-3 text-sm text-accent">{done}</p>}
+      <CalibrationNote />
     </Card>
+  );
+}
+
+/** Stato della calibrazione del voto statistico sui risultati ufficiali della lega. */
+function CalibrationNote() {
+  const q = useQuery({ queryKey: ["calibration"], queryFn: () => api<(Calibration & { updatedAt: number }) | null>("/league/calibration") });
+  const c = q.data;
+  const fmt = (x: number) => x.toLocaleString("it-IT", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  return (
+    <p className="mt-3 text-xs text-muted">
+      {c
+        ? <>Voto statistico calibrato su {c.samples} punteggi ufficiali della lega: scarto medio per squadra da {fmt(c.maeBefore)} a {fmt(c.maeAfter)} punti (correzione: media {c.offset >= 0 ? "+" : ""}{fmt(c.offset)}, dispersione ×{fmt(c.scale)}).</>
+        : <>Calibrazione del voto statistico: servono almeno {MIN_CALIBRATION_SAMPLES} punteggi ufficiali di squadre che hanno inserito la formazione in FootballLite. Si aggiorna a ogni import del calendario.</>}
+    </p>
   );
 }
 

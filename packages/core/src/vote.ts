@@ -207,14 +207,16 @@ export interface RoundEntry { id: number; role: Role; raw: number; minutes: numb
  * Centro e dispersione sono mediana e deviazione mediana (robuste: poche prestazioni eccezionali non spostano
  * tutti gli altri), calcolate su chi ha giocato almeno 45 minuti; chi ne ha giocati meno è confrontato con i subentrati.
  */
-export function normalizeRound(entries: RoundEntry[], spread = 0.65): Map<number, number> {
+export function normalizeRound(entries: RoundEntry[], spread = 0.65, calibration?: { offset: number; scale: number } | null): Map<number, number> {
   const out = new Map<number, number>();
+  // Correzione stimata dai risultati ufficiali della lega (vedi calibrate.ts), applicata prima dell'arrotondamento.
+  const k = calibration?.scale ?? 1, off = calibration?.offset ?? 0;
   for (const role of [1, 2, 3, 4] as Role[]) {
     const all = entries.filter((e) => e.role === role);
     const base = all.filter((e) => e.minutes >= 45);
     const sample = base.length >= 5 ? base : all;
     if (sample.length < 3) {
-      for (const e of all) out.set(e.id, roundVote(6 + clamp(e.raw, -3, 3)));
+      for (const e of all) out.set(e.id, roundVote(6 + k * clamp(e.raw, -3, 3) + off));
       continue;
     }
     const center = median(sample.map((e) => e.raw));
@@ -225,7 +227,7 @@ export function normalizeRound(entries: RoundEntry[], spread = 0.65): Map<number
     const shortCenter = short.length >= 5 ? median(short.map((e) => e.raw)) : null;
     for (const e of all) {
       const c = e.minutes >= 45 || sample === all ? center : shortCenter ?? center * clamp(e.minutes / 90, 0.25, 1);
-      out.set(e.id, roundVote(6 + clamp(((e.raw - c) / sd) * spread, -3, 3)));
+      out.set(e.id, roundVote(6 + k * clamp(((e.raw - c) / sd) * spread, -3, 3) + off));
     }
   }
   return out;

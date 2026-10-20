@@ -5,6 +5,7 @@ import { Hono } from "hono";
 import { newCode, normalizeCode, requireAdmin, requireSession, sha256, signSession, type AppEnv } from "./auth";
 import { kvRead, kvSet } from "./schedule";
 import { SOURCE_TERMS, sourcesAccepted } from "./terms";
+import { calibrateLeague, type CalibrationResult } from "./calibration";
 import { activeRound } from "./schedule";
 
 const SESSION_DAYS = 180;
@@ -343,8 +344,13 @@ league.post("/league/admin/calendar", async (c) => {
   // Ora dell'import: i risultati ufficiali presenti nel file sono aggiornati a questo momento.
   const official = days.reduce((n, d) => n + d.matches.filter((m) => m.homeGoals !== null).length, 0);
   await kvSet(c.env, `calendar:${s.lid}`, { importedAt: Date.now(), officialMatches: official });
-  return c.json({ days: days.length, matches: stmts.length - 1, officialMatches: official });
+  // Con i punteggi ufficiali si ricalibra il voto statistico della lega (se non bastano i dati resta la correzione precedente).
+  const calibration = official ? await calibrateLeague(c.env, s.lid).catch((e) => { console.error("calibrazione", e); return null; }) : null;
+  return c.json({ days: days.length, matches: stmts.length - 1, officialMatches: official, calibration });
 });
+
+/** Correzione attuale del voto statistico della lega, stimata dai risultati ufficiali. */
+league.get("/league/calibration", async (c) => c.json((await kvRead<CalibrationResult>(c.env, `calib:${c.get("session").lid}`))?.value ?? null));
 
 export interface CalendarRow {
   league_day: number; serie_a_day: number; home_team_id: number; away_team_id: number;

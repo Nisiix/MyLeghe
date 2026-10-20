@@ -30,6 +30,10 @@ App (PWA, anche come APK Android) per seguire la propria lega di fantacalcio. Ro
 - **Confronto di giornata:** ogni giocatore è confrontato con quelli dello stesso ruolo nella stessa giornata (centro 6; i subentrati con i subentrati). Il voto è arrotondato al mezzo punto.
 - **Chi prende voto:** chi gioca almeno 12 minuti. Sotto i 12 il voto c'è solo con gol, assist, espulsione, autogol o rigore segnato, sbagliato o parato. Con la sola ammonizione decide un'opzione del regolamento; il portiere con i soli gol subiti prende il voto base con il malus.
 
+- **Calibrazione sulla lega:** a ogni import del calendario, nelle giornate con punteggi ufficiali e formazioni inserite in FootballLite, l'app confronta i totali ufficiali delle squadre con quelli calcolati e corregge media e dispersione dei voti stimati (servono almeno 6 punteggi; con pochi dati la correzione resta prudente). Lo scarto prima e dopo è visibile nella pagina Admin.
+
+Non si usano voti pubblicati da terzi (i termini di Fantacalcio ne vietano l'estrazione): la calibrazione si basa solo sui punteggi della propria lega.
+
 In alternativa l'admin può usare il rating della fonte o il voto base.
 
 Cosa FootballLite **non** fa: non accede alle API o all'app di Leghe Fantacalcio, non legge pagine di fantacalcio.it o di altri siti (pagelle comprese), non mostra foto di giocatori né loghi (al loro posto ci sono le iniziali), non riproduce articoli.

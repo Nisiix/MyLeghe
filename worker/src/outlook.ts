@@ -1,6 +1,6 @@
 // Dati aggregati per l'app: giornata attiva, titolarità stimata e dati live dei giocatori delle rose.
 
-import { fantavote, normalizeRound, starterProbability, statVote, type LeagueConfig, type MatchEvents, type PlayerStats, type Role, type RoundEntry, type SubRole, type VoteContext } from "@footballlite/core";
+import { fantavote, normalizeRound, starterProbability, statVote, type LeagueConfig, type MatchEvents, type PlayerStats, type Role, type RoundEntry, type SubRole, type VoteContext, type Calibration } from "@footballlite/core";
 import { Hono } from "hono";
 import { requireSession, type AppEnv } from "./auth";
 import type { Env } from "./env";
@@ -118,32 +118,42 @@ outlook.get("/league/outlook", async (c) => c.json(await computeOutlook(c.env, c
 /** Eventi della giornata per i giocatori delle rose (per il live e "Simula"). */
 outlook.get("/league/live/:round", async (c) => {
   const s = c.get("session");
-  const round = Number(c.req.param("round"));
-  const rows = await c.env.DB.prepare(
+  const cal = (await kvRead<Calibration>(c.env, `calib:${s.lid}`))?.value ?? null;
+  return c.json(await liveRound(c.env, s.lid, Number(c.req.param("round")), cal));
+});
+
+export type LiveState = "pending" | "live" | "finished";
+
+/**
+ * Eventi e stato della giornata per i giocatori delle rose della lega, con il voto statistico normalizzato.
+ * `calibration`: correzione stimata dai risultati ufficiali della lega (null = voti del modello senza correzione).
+ */
+export async function liveRound(env: Env, lid: string, round: number, calibration: Calibration | null) {
+  const rows = await env.DB.prepare(
     `SELECT pm.* FROM player_match pm WHERE pm.matchday = ? AND pm.player_id IN
        (SELECT r.ext_id FROM roster r JOIN teams t ON t.id = r.team_id WHERE t.league_id = ? AND r.ext_id IS NOT NULL)`,
-  ).bind(round, s.lid).all<PmRow>();
-  const matches = await c.env.DB.prepare("SELECT * FROM sa_matches WHERE matchday = ? ORDER BY kickoff").bind(round).all<SaMatch>();
-  const teamMap = (await kvRead<Record<number, number>>(c.env, "teammap"))?.value ?? {};
-  const players = await c.env.DB.prepare(
+  ).bind(round, lid).all<PmRow>();
+  const matches = await env.DB.prepare("SELECT * FROM sa_matches WHERE matchday = ? ORDER BY kickoff").bind(round).all<SaMatch>();
+  const teamMap = (await kvRead<Record<number, number>>(env, "teammap"))?.value ?? {};
+  const players = await env.DB.prepare(
     `SELECT p.id, p.team_ext_id FROM players p WHERE p.id IN
        (SELECT r.ext_id FROM roster r JOIN teams t ON t.id = r.team_id WHERE t.league_id = ? AND r.ext_id IS NOT NULL)`,
-  ).bind(s.lid).all<{ id: number; team_ext_id: number | null }>();
+  ).bind(lid).all<{ id: number; team_ext_id: number | null }>();
   const ms = matches.results ?? [];
-  const state: Record<number, string> = {};
+  const state: Record<number, LiveState> = {};
   for (const p of players.results ?? []) {
     const fd = p.team_ext_id ? teamMap[p.team_ext_id] : undefined;
     state[p.id] = stateOf(ms.find((m) => m.home_id === fd || m.away_id === fd));
   }
   // Voto statistico normalizzato sulla giornata: confronto con tutti i giocatori dello stesso ruolo (non solo delle rose).
-  const everyone = await c.env.DB.prepare(
+  const everyone = await env.DB.prepare(
     `SELECT pm.player_id, pm.event_id, pm.minutes, pm.stats, COALESCE(p.role, 3) AS role, p.team_ext_id, ps.sub_role
      FROM player_match pm LEFT JOIN players p ON p.id = pm.player_id
      LEFT JOIN player_status ps ON ps.player_id = pm.player_id AND ps.matchday = pm.matchday
      WHERE pm.matchday = ? AND pm.minutes > 0`,
   ).bind(round).all<{ player_id: number; event_id: number; minutes: number; stats: string | null; role: Role; team_ext_id: number | null; sub_role: SubRole | null }>();
   // Contesto: casa/trasferta e forza dell'avversario dalla classifica (1 = prima, -1 = ultima).
-  const table = await standings(c.env);
+  const table = await standings(env);
   const rank = new Map(table.map((t) => [t.team_id, t.position]));
   const strength = (fdTeam: number) => {
     const pos = rank.get(fdTeam);
@@ -161,13 +171,13 @@ outlook.get("/league/live/:round", async (c) => {
     const v = statVote({ ...(e.stats ? (JSON.parse(e.stats) as PlayerStats) : {}), minutes_played: e.minutes }, e.role, contextOf(e));
     if (v) entries.push({ id: e.player_id, role: e.role, raw: v.raw, minutes: e.minutes });
   }
-  const normalized = normalizeRound(entries);
+  const normalized = normalizeRound(entries, undefined, calibration);
   const events: Record<number, MatchEvents> = {};
   for (const r of rows.results ?? []) events[r.player_id] = { ...toEvents(r), statVote: normalized.get(r.player_id) ?? null };
-  return c.json({
+  return {
     round,
     matches: ms.map((m) => ({ id: m.id, kickoff: m.kickoff, status: m.status, home: m.home_name, away: m.away_name, score: m.score_home === null ? null : [m.score_home, m.score_away], state: stateOf(m) })),
-    state,
+    state: state as Record<number, LiveState>,
     events,
-  });
-});
+  };
+}

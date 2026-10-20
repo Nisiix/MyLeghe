@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   DEFAULT_CONFIG, dueReminder, goalsFromPoints, matchPlayer, normalizeConfig, parseCsv, parseRosterGrid,
-  parseCalendarGrid, playerLiveScore, computeTeam, statVote, normalizeRound, subRolesFromLineup, voteEligibility, computeMatch, matchGoals, noLineupScore, scorePlayers, starterDrops, starterProbability, suggestLineup, validateLineup,
+  parseCalendarGrid, playerLiveScore, computeTeam, statVote, normalizeRound, subRolesFromLineup, voteEligibility, fitCalibration, computeMatch, matchGoals, noLineupScore, scorePlayers, starterDrops, starterProbability, suggestLineup, validateLineup,
   type Cell, type RosterEntry,
 } from "../src";
 
@@ -290,5 +290,27 @@ describe("normalizzazione di giornata", () => {
     const avg = [...v.values()].reduce((a, b) => a + b, 0) / v.size;
     expect(Math.abs(avg - 6)).toBeLessThan(0.3);
     expect(v.get(9)!).toBeGreaterThan(v.get(0)!);
+  });
+});
+
+describe("calibrazione sui risultati ufficiali", () => {
+  // Punteggi ufficiali generati con voti più alti di 0,3 e più dispersi del 20% rispetto a quelli calcolati.
+  const samples = Array.from({ length: 30 }, (_, i) => {
+    const votes = Array.from({ length: 11 }, (_, k) => 6 + (((i * 7 + k * 3) % 9) - 4) * 0.25);
+    const computed = 70 + votes.reduce((a, v) => a + v - 6, 0);
+    const official = computed + votes.reduce((a, v) => a + 0.2 * (v - 6) + 0.3, 0);
+    return { official, computed, votes };
+  });
+
+  it("stima spostamento e dispersione e riduce lo scarto", () => {
+    const c = fitCalibration(samples)!;
+    expect(c.offset).toBeGreaterThan(0.2);
+    expect(c.offset).toBeLessThanOrEqual(0.3);
+    expect(c.scale).toBeGreaterThan(1.1);
+    expect(c.maeAfter).toBeLessThan(c.maeBefore / 2);
+  });
+
+  it("non corregge con pochi dati", () => {
+    expect(fitCalibration(samples.slice(0, 5))).toBeNull();
   });
 });
