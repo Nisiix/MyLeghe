@@ -20,7 +20,7 @@ database_id = "2fb3b3f8-a574-4212-86b9-6e98ab98e9d0"
 migrations_dir = "migrations"
 
 [vars]
-VAPID_SUBJECT = "https://footballlite.fantalite-worker.workers.dev"
+VAPID_SUBJECT = "https://footballlite.footballlite-app.workers.dev"
 
 # Segreti (npx wrangler secret put NOME --name footballlite; in locale nel file .dev.vars):
 #   SETUP_CODE            codice per creare leghe e lanciare la sincronizzazione manuale
