@@ -127,6 +127,42 @@ export function Sheet({ open, onClose, title, children }: { open: boolean; onClo
   );
 }
 
+/** Pannello laterale da destra (menu dell'app), chiuso con Esc o toccando fuori. */
+export function Drawer({ open, onClose, title, children }: { open: boolean; onClose: () => void; title: string; children: ReactNode }) {
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [open, onClose]);
+  if (!open) return null;
+  return (
+    <div className="fixed inset-0 z-50 flex justify-end bg-black/60" onClick={onClose}>
+      <div role="dialog" aria-modal="true" aria-label={title}
+        className="safe-top flex h-full w-[min(20rem,86vw)] flex-col overflow-y-auto border-l border-line bg-surface p-4 safe-bottom"
+        onClick={(e) => e.stopPropagation()}>
+        <div className="mb-3 flex items-center justify-between">
+          <h2 className="text-lg font-extrabold">{title}</h2>
+          <button onClick={onClose} aria-label="Chiudi il menu" className="rounded-full p-1.5 text-muted hover:bg-surface-2 hover:text-ink">
+            <svg viewBox="0 0 24 24" className="size-5" fill="none" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round" aria-hidden><path d="M6 6l12 12M18 6L6 18" /></svg>
+          </button>
+        </div>
+        {children}
+      </div>
+    </div>
+  );
+}
+
+/** Interruttore acceso/spento (role="switch"). */
+export function Switch({ checked, onChange, label }: { checked: boolean; onChange: (v: boolean) => void; label: string }) {
+  return (
+    <button type="button" role="switch" aria-checked={checked} aria-label={label} onClick={() => onChange(!checked)}
+      className={`relative h-6 w-11 shrink-0 rounded-full transition ${checked ? "bg-accent" : "bg-line"}`}>
+      <span className={`absolute top-0.5 size-5 rounded-full bg-white shadow transition-all ${checked ? "left-[22px]" : "left-0.5"}`} />
+    </button>
+  );
+}
+
 /**
  * "card" è l'azione chiave della schermata (verde pieno, come «Inserisci formazione»); "outline" il pulsante
  * secondario bordato di blu; "ghost" il neutro.

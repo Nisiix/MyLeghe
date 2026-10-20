@@ -8,6 +8,16 @@
     <link rel="icon" href="/icon.svg" type="image/svg+xml" />
     <link rel="apple-touch-icon" href="/icon-192.png" />
     <title>FootballLite</title>
+    <script>
+      // Tema prima del primo disegno (niente lampo chiaro in tema scuro): scelta salvata, altrimenti quello di sistema.
+      try {
+        var t = localStorage.getItem("footballlite.theme");
+        if (t === "dark" || (t !== "light" && matchMedia("(prefers-color-scheme: dark)").matches)) {
+          document.documentElement.classList.add("dark");
+          document.querySelector('meta[name="theme-color"]').setAttribute("content", "#161a21");
+        }
+      } catch (e) {}
+    </script>
   </head>
   <body>
     <div id="root"></div>

@@ -1,9 +1,11 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { useState, type ReactNode } from "react";
-import { Link, NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
+import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { useLeague } from "../lib/data";
 import { session, useLeagues, useSession } from "../lib/session";
-import { Sheet, TeamBadge } from "./ui";
+import { setTheme, useTheme } from "../lib/theme";
+import { DataStatusBanner } from "./DataStatus";
+import { Drawer, Sheet, Switch, TeamBadge } from "./ui";
 
 /** Elenco delle leghe del dispositivo, ingresso in un'altra lega e creazione di una nuova. */
 function LeagueMenu({ open, onClose }: { open: boolean; onClose: () => void }) {
@@ -37,17 +39,26 @@ function LeagueMenu({ open, onClose }: { open: boolean; onClose: () => void }) {
 const ICONS: Record<string, ReactNode> = {
   home: <path d="M3 10.5L12 3l9 7.5V20a1 1 0 01-1 1h-5v-6H9v6H4a1 1 0 01-1-1z" />,
   lineup: <><rect x="4" y="3" width="16" height="18" rx="2" /><path d="M4 12h16M12 3v3M9 21v-3h6v3" /><circle cx="12" cy="12" r="2.5" /></>,
+  rosters: <><circle cx="9" cy="8" r="3.2" /><path d="M3 20c0-3.3 2.7-6 6-6s6 2.7 6 6" /><circle cx="17" cy="9" r="2.6" /><path d="M16 14.2c2.8-.4 5 1.8 5 4.8" /></>,
   live: <><circle cx="12" cy="12" r="9" /><path d="M10 8.5l5.5 3.5-5.5 3.5z" /></>,
-  more: <><circle cx="12" cy="12" r="3" /><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1L7 17M17 7l2.1-2.1" /></>,
+  user: <><circle cx="12" cy="8" r="4" /><path d="M4 21c0-4.4 3.6-8 8-8s8 3.6 8 8" /></>,
+  bell: <><path d="M6 16V11a6 6 0 1112 0v5l2 2H4z" /><path d="M10 20a2 2 0 004 0" /></>,
+  shield: <path d="M12 3l8 3v6c0 4.5-3.4 8.2-8 9-4.6-.8-8-4.5-8-9V6z" />,
+  info: <><circle cx="12" cy="12" r="9" /><path d="M12 11v6M12 7.5v.5" /></>,
+  moon: <path d="M20 14.5A8 8 0 019.5 4a8 8 0 1010.5 10.5z" />,
 };
 
-/** Barra in basso come nelle app di lega: Home, Formazione, Live, Altro. */
+const Icon = ({ name, className = "size-6", strokeWidth = 1.8 }: { name: string; className?: string; strokeWidth?: number }) => (
+  <svg viewBox="0 0 24 24" className={className} fill="none" stroke="currentColor" strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round" aria-hidden>{ICONS[name]}</svg>
+);
+
+/** Barra in basso come nelle app di lega: Home, Formazione, Rose, Live. */
 function TabBar() {
   const items = [
     { to: "/", label: "Home", icon: "home", end: true },
     { to: "/formazione", label: "Formazione", icon: "lineup" },
+    { to: "/rose", label: "Rose", icon: "rosters" },
     { to: "/live", label: "Live", icon: "live" },
-    { to: "/impostazioni", label: "Altro", icon: "more" },
   ];
   return (
     <nav aria-label="Sezioni" className="fixed inset-x-0 bottom-0 z-40 border-t border-line bg-surface safe-nav">
@@ -59,7 +70,7 @@ function TabBar() {
               {({ isActive }) => (
                 <>
                   {isActive && <span className="absolute inset-x-6 top-0 h-[3px] rounded-b-full bg-accent" />}
-                  <svg viewBox="0 0 24 24" className="size-6" fill="none" stroke="currentColor" strokeWidth={isActive ? 2.2 : 1.8} strokeLinecap="round" strokeLinejoin="round" aria-hidden>{ICONS[i.icon]}</svg>
+                  <Icon name={i.icon} strokeWidth={isActive ? 2.2 : 1.8} />
                   {i.label}
                 </>
               )}
@@ -71,37 +82,72 @@ function TabBar() {
   );
 }
 
-/** Intestazione blu con lega e squadra, barra delle sezioni in basso. */
+/** Menu dell'app (pulsante con le tre linee): utente, notifiche, admin, informazioni e tema chiaro/scuro. */
+function MainMenu({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const s = useSession();
+  const theme = useTheme();
+  const items = [
+    { to: "/utente", label: "Impostazioni utente", icon: "user" },
+    { to: "/notifiche", label: "Notifiche", icon: "bell" },
+    ...(s?.admin ? [{ to: "/admin", label: "Admin", icon: "shield" }] : []),
+    { to: "/informazioni", label: "Informazioni", icon: "info" },
+  ];
+  return (
+    <Drawer open={open} onClose={onClose} title="Menu">
+      {s?.username && <p className="mb-3 truncate text-sm text-muted">@{s.username} · {s.league.name}</p>}
+      <ul className="flex flex-col gap-1">
+        {items.map((i) => (
+          <li key={i.to}>
+            <NavLink to={i.to} onClick={onClose}
+              className={({ isActive }) => `flex items-center gap-3 rounded-xl px-3 py-2.5 font-semibold ${isActive ? "bg-surface-2 text-ink" : "text-ink hover:bg-surface-2"}`}>
+              <Icon name={i.icon} className="size-5 text-muted" />{i.label}
+            </NavLink>
+          </li>
+        ))}
+      </ul>
+      <div className="mt-3 flex items-center gap-3 border-t border-line px-3 pt-4">
+        <Icon name="moon" className="size-5 text-muted" />
+        <span className="flex-1 font-semibold">Tema scuro</span>
+        <Switch checked={theme === "dark"} onChange={(on) => setTheme(on ? "dark" : "light")} label="Tema scuro" />
+      </div>
+    </Drawer>
+  );
+}
+
+/** Intestazione con lega e squadra e pulsante del menu, barra delle sezioni in basso. */
 export function Layout() {
   const s = useSession();
   const league = useLeague();
   const navigate = useNavigate();
   const loc = useLocation();
   const myTeam = league.data?.teams.find((t) => t.id === s?.myTeamId);
-  const root = ["/", "/formazione", "/live", "/impostazioni"].includes(loc.pathname);
+  const root = ["/", "/formazione", "/rose", "/live"].includes(loc.pathname);
+  const [leagues, setLeagues] = useState(false);
   const [menu, setMenu] = useState(false);
   return (
     <div className="mx-auto flex min-h-full max-w-lg flex-col">
-      <header className="sticky top-0 z-30 flex items-center gap-3 bg-brand px-4 py-3 text-brand-ink shadow-md safe-top">
+      <header className="sticky top-0 z-30 flex items-center gap-3 border-b border-white/10 bg-brand px-4 py-3 text-brand-ink shadow-md safe-top dark:shadow-none">
         {!root && (
           <button onClick={() => navigate(-1)} aria-label="Indietro" className="rounded-full p-1 text-white/80 hover:text-white">
             <svg viewBox="0 0 24 24" className="size-6" fill="none" stroke="currentColor" strokeWidth={2.2}><path d="M15 18l-6-6 6-6" /></svg>
           </button>
         )}
         {myTeam ? <TeamBadge id={myTeam.id} name={myTeam.name} size={36} /> : null}
-        <button onClick={() => setMenu(true)} className="min-w-0 flex-1 text-left" aria-label="Cambia lega">
+        <button onClick={() => setLeagues(true)} className="min-w-0 flex-1 text-left" aria-label="Cambia lega">
           <div className="truncate text-base font-extrabold leading-tight">{s?.league.name ?? "FootballLite"} <span className="text-white/60">▾</span></div>
           <div className="truncate text-xs text-white/70">{myTeam ? myTeam.name : s?.admin ? "Admin" : "Solo visualizzazione"}</div>
         </button>
-        {s?.admin && (
-          <Link to="/admin" className="rounded-full border border-white/40 px-3 py-1 text-xs font-bold text-white hover:bg-white/10">Admin</Link>
-        )}
+        <button onClick={() => setMenu(true)} aria-label="Apri il menu" aria-expanded={menu} className="rounded-full p-1.5 text-white hover:bg-white/10">
+          <svg viewBox="0 0 24 24" className="size-6" fill="none" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round" aria-hidden><path d="M4 6h16M4 12h16M4 18h16" /></svg>
+        </button>
       </header>
       <main className="flex-1 px-3 pt-4 pb-28">
+        <DataStatusBanner />
         <Outlet />
       </main>
       <TabBar />
-      <LeagueMenu open={menu} onClose={() => setMenu(false)} />
+      <LeagueMenu open={leagues} onClose={() => setLeagues(false)} />
+      <MainMenu open={menu} onClose={() => setMenu(false)} />
     </div>
   );
 }

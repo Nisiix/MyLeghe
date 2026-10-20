@@ -102,3 +102,17 @@ export function myMatch(calendar: CalendarRow[] | undefined, serieADay: number, 
 export function newsSearchUrl(playerName: string): string {
   return `https://www.google.com/search?tbm=nws&q=${encodeURIComponent(`${playerName} Serie A`)}`;
 }
+
+/** Stato del giocatore per la prossima partita, in parole (indisponibile, in dubbio, probabile/ufficiale). */
+export function outlookStatus(o?: Outlook): string {
+  if (!o) return "Non abbinato alla fonte dati";
+  if (o.unavailable === "injury") return "Infortunato";
+  if (o.unavailable === "suspension") return "Squalificato";
+  if (o.unavailable) return "Indisponibile";
+  if (o.doubtful) return "In dubbio";
+  if (o.confirmed && o.predicted === "starter") return "Titolare ufficiale";
+  if (o.confirmed && o.predicted === "bench") return "In panchina (ufficiale)";
+  if (o.predicted === "starter") return "Probabile titolare";
+  if (o.predicted === "bench") return "Probabile panchina";
+  return "";
+}

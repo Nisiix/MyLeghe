@@ -8,17 +8,43 @@ export class ApiError extends Error {
   }
 }
 
+/** Errori delle pagine di Cloudflare (corpo "error code: NNNN") tradotti in un motivo leggibile. */
+const CLOUDFLARE_CODES: Record<string, string> = {
+  "1101": "il Worker FootballLite è andato in errore durante la richiesta",
+  "1102": "il Worker FootballLite ha superato i limiti di CPU o memoria del piano",
+  "1015": "Cloudflare sta limitando le richieste: troppe in poco tempo",
+  "1027": "superato il limite giornaliero di richieste del piano gratuito di Cloudflare: riprende a mezzanotte (UTC)",
+  "1042": "il Worker FootballLite non è raggiungibile in questo momento",
+};
+
+/** Motivo dell'errore quando la risposta non arriva dal backend ma da Cloudflare (o non arriva affatto). */
+function failureReason(status: number, text: string): string {
+  const code = /error code:?\s*(\d{4})/i.exec(text)?.[1];
+  if (code) return `Cloudflare non ha restituito i dati (errore ${code}): ${CLOUDFLARE_CODES[code] ?? "errore del servizio"}.`;
+  if (status >= 500) return `Cloudflare non ha restituito i dati (HTTP ${status}): errore del server, riprova tra poco.`;
+  return `Errore ${status}`;
+}
+
 export async function api<T>(path: string, init?: { method?: string; body?: unknown; headers?: Record<string, string> }): Promise<T> {
   const s = session.get();
-  const res = await fetch("/api" + path, {
-    method: init?.method ?? "GET",
-    headers: {
-      ...(s ? { Authorization: "Bearer " + s.token } : {}),
-      ...(init?.body !== undefined ? { "Content-Type": "application/json" } : {}),
-      ...init?.headers,
-    },
-    body: init?.body !== undefined ? JSON.stringify(init.body) : undefined,
-  });
+  let res: Response;
+  try {
+    res = await fetch("/api" + path, {
+      method: init?.method ?? "GET",
+      headers: {
+        ...(s ? { Authorization: "Bearer " + s.token } : {}),
+        ...(init?.body !== undefined ? { "Content-Type": "application/json" } : {}),
+        ...init?.headers,
+      },
+      body: init?.body !== undefined ? JSON.stringify(init.body) : undefined,
+    });
+  } catch {
+    // La richiesta non è partita o non ha avuto risposta: rete assente o server non raggiungibile.
+    const offline = typeof navigator !== "undefined" && navigator.onLine === false;
+    throw new ApiError(0, offline
+      ? "Sei offline: i dati arrivano dal server FootballLite su Cloudflare. Riprova quando torna la connessione."
+      : "Server FootballLite su Cloudflare non raggiungibile: la richiesta non ha avuto risposta. Controlla la connessione o riprova tra poco.");
+  }
   const text = await res.text();
   let body: any = null;
   try { body = text ? JSON.parse(text) : null; } catch { body = text; }
@@ -26,7 +52,9 @@ export async function api<T>(path: string, init?: { method?: string; body?: unkn
     // Accesso fatto da un altro dispositivo (o profilo azzerato): si resta nella lega e si torna alla scelta dell'utente.
     if (res.status === 401 && s && body?.otherDevice && s.leagueToken) session.leaveProfile(body.error);
     else if (res.status === 401 && s) session.logout();
-    throw new ApiError(res.status, body?.error ?? `Errore ${res.status}`, body);
+    // 502: una fonte dati esterna (football-data.org o BSD) ha risposto con un errore.
+    const fromApi = typeof body === "object" && body?.error ? (res.status === 502 ? `Fonte dati non disponibile: ${body.error}` : body.error) : null;
+    throw new ApiError(res.status, fromApi ?? failureReason(res.status, typeof body === "string" ? body : ""), body);
   }
   return body as T;
 }

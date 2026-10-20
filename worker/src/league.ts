@@ -269,6 +269,46 @@ league.post("/league/admin/import", async (c) => {
   return c.json({ imported: teams.length, poolSize: pool.length });
 });
 
+/**
+ * Stato dei dati per tutti gli utenti della lega: se titolarità, formazioni o statistiche non arrivano,
+ * dice perché (termini delle fonti, sincronizzazione ferma o fallita, budget esaurito, giocatori non abbinati).
+ */
+league.get("/league/status", async (c) => {
+  const s = c.get("session");
+  const now = Date.now();
+  const accepted = await sourcesAccepted(c.env);
+  const pool = await c.env.DB.prepare("SELECT COUNT(*) AS n, MAX(updated_at) AS at FROM players").first<{ n: number; at: number | null }>();
+  const last = await kvRead<{ ok: boolean; error?: string; skipped?: string }>(c.env, "sync:last");
+  const used = await quotaUsed(c.env);
+  const myTeam = s.tids[0];
+  const mine = myTeam
+    ? await c.env.DB.prepare("SELECT COUNT(*) AS total, SUM(ext_id IS NULL) AS unmatched FROM roster WHERE team_id = ?").bind(myTeam).first<{ total: number; unmatched: number | null }>()
+    : null;
+  const time = (t: number) => new Date(t).toLocaleString("it-IT", { timeZone: "Europe/Rome", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
+  const issues: string[] = [];
+  if (!accepted) {
+    issues.push("Chi gestisce l'installazione non ha ancora accettato i termini delle fonti dati: la sincronizzazione su Cloudflare è ferma, quindi calendario, titolarità e voti non vengono aggiornati.");
+  } else if (!last) {
+    issues.push("La sincronizzazione su Cloudflare non è ancora partita: il cron gira ogni 5 minuti, i primi dati arrivano a breve.");
+  } else {
+    if (last.value.skipped) issues.push(`Ultima sincronizzazione saltata (${time(last.updatedAt)}): ${last.value.skipped}.`);
+    else if (!last.value.ok) issues.push(`Ultima sincronizzazione fallita (${time(last.updatedAt)}): ${last.value.error ?? "errore sconosciuto"}. Si riprova da sola ogni 5 minuti.`);
+    if (now - last.updatedAt > 20 * 60_000) issues.push(`Nessuna sincronizzazione dal ${time(last.updatedAt)}: il cron di Cloudflare non sta girando (Worker non pubblicato, trigger disattivato o limiti del piano gratuito).`);
+  }
+  if (accepted && !pool?.n) issues.push("I giocatori di Serie A non sono ancora stati scaricati: senza di loro le rose non si abbinano e la titolarità non è disponibile.");
+  if (used >= BSD_DAILY_BUDGET) issues.push("Raggiunto il limite giornaliero di richieste alla fonte dati: formazioni e statistiche riprendono domani.");
+  return c.json({
+    ok: issues.length === 0,
+    issues,
+    lastSync: last ? { at: last.updatedAt, ok: last.value.ok && !last.value.skipped, error: last.value.error ?? last.value.skipped ?? null } : null,
+    players: pool?.n ?? 0,
+    playersUpdatedAt: pool?.at ?? null,
+    requestsToday: used,
+    requestsBudget: BSD_DAILY_BUDGET,
+    myRoster: mine ? { total: mine.total, unmatched: mine.unmatched ?? 0 } : null,
+  });
+});
+
 /** Rifà l'abbinamento automatico dei giocatori non abbinati (es. dopo l'aggiornamento delle rose di Serie A). */
 league.post("/league/admin/rematch", async (c) => {
   const s = c.get("session");

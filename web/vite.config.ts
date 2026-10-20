@@ -19,7 +19,7 @@ export default defineConfig({
         description: "Formazione, titolarità stimata e live per la tua lega di fantacalcio",
         lang: "it",
         theme_color: "#0f2350",
-        background_color: "#eef1f6",
+        background_color: "#f0f2f5",
         display: "standalone",
         start_url: "/",
         icons: [

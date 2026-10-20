@@ -1,12 +1,12 @@
 import { moduleShape, orderBench, parseLineupText, ROLE_NAME, ROLES, suggestLineup, validateLineup, type LeagueConfig, type ScoredPlayer } from "@footballlite/core";
 import { useQueryClient } from "@tanstack/react-query";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { Button, Card, Empty, ErrorBox, PlayerAvatar, RoleTag, Sheet, Spinner, StarterPercent, fmt } from "../components/ui";
 import { api, ApiError } from "../lib/api";
 import { useLeague, useLineups, useOutlook, useRound, type Lineup, type Outlook, type RosterPlayer } from "../lib/data";
 import { useSession } from "../lib/session";
-import { newsSearchUrl, rosterOf, scoredRoster } from "../lib/team";
+import { newsSearchUrl, outlookStatus as statusText, rosterOf, scoredRoster } from "../lib/team";
 
 type Row = ScoredPlayer & { info: RosterPlayer; outlook?: Outlook };
 
@@ -25,7 +25,7 @@ export function LineupPage() {
 
   if (league.isLoading || round.isLoading || outlook.isLoading || lineups.isLoading || (prevRound && previous.isLoading)) return <Spinner label="Carico la tua rosa…" />;
   if (league.error || round.error) return <ErrorBox error={league.error ?? round.error} />;
-  if (!s?.myTeamId) return <Card title="Formazione"><Empty>Collega la tua rosa al profilo dalle <Link to="/impostazioni" className="underline">impostazioni</Link>.</Empty></Card>;
+  if (!s?.myTeamId) return <Card title="Formazione"><Empty>Collega la tua rosa al profilo dalle <Link to="/utente" className="underline">impostazioni utente</Link>.</Empty></Card>;
   const started = round.data!.phase !== "upcoming";
   // Inserimento per conto di un altro utente: solo a giornata iniziata e se lui non ha inserito la sua.
   const target = Number(params.get("squadra")) || s.myTeamId;
@@ -49,11 +49,14 @@ export function LineupPage() {
 type Snapshot = { module: string; starters: string[]; bench: string[]; captain: string | null; vice: string | null; message: { ok: boolean; text: string } | null };
 type Picking = { role: number; replace: string | null; target: "starters" | "bench" };
 type Candidate = { id: number; name: string; team_name: string; role?: number | null };
+/** Gestori del trascinamento (dito o mouse) e del tocco su un giocatore. */
+type Grab = { onPointerDown: (e: React.PointerEvent) => void; onClick: (e: React.MouseEvent) => void; onContextMenu: (e: React.MouseEvent) => void };
+const SINGULAR: Record<number, string> = { 1: "portiere", 2: "difensore", 3: "centrocampista", 4: "attaccante" };
 
 /**
- * Inserimento della formazione come in Leghe Fantacalcio: modulo, campo con gli slot del modulo, panchina in ordine,
- * e sotto la rosa per ruolo. Un tocco su un giocatore della rosa lo schiera (campo, poi panchina), un tocco su
- * uno schierato lo toglie; dal titolare si scelgono capitano, vice, panchina o sostituto.
+ * Inserimento della formazione come in Leghe Fantacalcio: modulo, campo con gli slot del modulo, panchina in ordine
+ * e sotto le riserve (chi non è schierato). Un giocatore si trascina sul posto di un altro (scambio), su uno slot
+ * libero o in panchina; un tocco su uno schierato lo manda tra le riserve, un tocco su una riserva lo schiera.
  */
 function Editor({ teamId, proxyName, round, started, scored, cfg, current, last, unmatched, admin, savedMessage, onSaved }: {
   teamId: number; proxyName?: string; round: number; started: boolean; scored: Row[]; cfg: LeagueConfig; current?: Lineup; last?: Lineup; unmatched: number; admin: boolean;
@@ -142,15 +145,144 @@ function Editor({ teamId, proxyName, round, started, scored, cfg, current, last,
     setMessage(null);
   }
 
-  function toBench(id: string) {
-    const p = byId.get(id);
-    if (!p || !benchRoomFor(p.role)) { setMessage({ ok: false, text: "La panchina è piena: togli prima un panchinaro." }); setAction(null); return; }
-    setStarters(starters.filter((x) => x !== id));
-    setBench([...bench, id]);
-    clearRoles(id);
-    setAction(null);
-    setMessage(null);
+  /** Tocco su uno schierato (campo o panchina): torna tra le riserve. */
+  function toReserves(p: Row) {
+    removePlayer(p.id);
+    setMessage({ ok: true, text: `${p.name} spostato tra le riserve.` });
   }
+
+  /**
+   * Rilascio di un giocatore trascinato. Zone: "s:<id>" titolare (scambio), "slot:<ruolo>" slot libero del campo,
+   * "b:<indice>" panchinaro (ordine o scambio), "bench" posto libero in panchina, "reserve" riserve.
+   */
+  function dropOn(id: string, zone: string) {
+    const p = byId.get(id);
+    if (!p) return;
+    const [kind, arg] = zone.split(":");
+    const from = starters.includes(id) ? "starter" : bench.includes(id) ? "bench" : "reserve";
+    const fail = (text: string) => setMessage({ ok: false, text });
+    const benchFull = (role: number) => bench.length >= cfg.benchCount
+      ? "La panchina è piena: trascina il giocatore su un panchinaro per scambiarli."
+      : `In panchina c'è già il numero massimo di ${ROLE_NAME[role].toLowerCase()}.`;
+    setMessage(null);
+    if (kind === "s") {
+      const other = arg;
+      const o = byId.get(other);
+      if (!o || other === id) return;
+      if (o.role !== p.role) return fail(`${p.name} (${SINGULAR[p.role]}) non può prendere il posto di ${o.name} (${SINGULAR[o.role]}): il modulo resta ${module.split("").join("-")}.`);
+      if (from === "starter") { setStarters(starters.map((x) => (x === id ? other : x === other ? id : x))); return; }
+      setStarters(starters.map((x) => (x === other ? id : x)));
+      if (from === "bench") setBench(bench.map((x) => (x === id ? other : x)));
+      if (captain === other) setCaptain(id);
+      if (vice === other) setVice(id);
+      return;
+    }
+    if (kind === "slot") {
+      const role = Number(arg);
+      if (from === "starter") return;
+      if (p.role !== role) return fail(`Lo slot libero è per un ${SINGULAR[role]}: ${p.name} è ${SINGULAR[p.role]}.`);
+      setStarters([...starters, id]);
+      if (from === "bench") setBench(bench.filter((x) => x !== id));
+      return;
+    }
+    if (kind === "b") {
+      const at = Number(arg);
+      const other = bench[at];
+      const o = other ? byId.get(other) : undefined;
+      if (!o || other === id) return;
+      if (from === "bench") { setBench(move(bench, bench.indexOf(id), at)); return; }
+      if (from === "starter") {
+        if (o.role !== p.role) return fail(`${p.name} e ${o.name} hanno ruoli diversi: per scambiare un titolare con un panchinaro servono giocatori dello stesso ruolo.`);
+        setStarters(starters.map((x) => (x === id ? other : x)));
+        setBench(bench.map((x) => (x === other ? id : x)));
+        if (captain === id) setCaptain(other);
+        if (vice === id) setVice(other);
+        return;
+      }
+      // Dalle riserve: prende il posto del panchinaro, che torna tra le riserve.
+      if (cfg.benchPerRole && o.role !== p.role && benchRows.filter((x) => x.role === p.role).length >= cfg.benchPerRole[p.role - 1]) return fail(benchFull(p.role));
+      setBench(bench.map((x) => (x === other ? id : x)));
+      return;
+    }
+    if (kind === "bench") {
+      if (from === "bench") { setBench([...bench.filter((x) => x !== id), id]); return; }
+      if (!benchRoomFor(p.role)) return fail(benchFull(p.role));
+      if (from === "starter") { setStarters(starters.filter((x) => x !== id)); clearRoles(id); }
+      setBench([...bench, id]);
+      return;
+    }
+    if (kind === "reserve" && from !== "reserve") removePlayer(id);
+  }
+
+  // Trascinamento: posizione del dito/mouse e zona sotto (per l'evidenziazione); la logica di rilascio è sempre quella dell'ultimo render.
+  const [drag, setDrag] = useState<{ id: string; x: number; y: number; over: string | null } | null>(null);
+  const dropRef = useRef(dropOn);
+  dropRef.current = dropOn;
+  const dragging = useRef(false);
+  // Durante il trascinamento al tocco la pagina non deve scorrere (listener non passivo registrato prima del tocco).
+  useEffect(() => {
+    const block = (e: TouchEvent) => { if (dragging.current) e.preventDefault(); };
+    document.addEventListener("touchmove", block, { passive: false });
+    return () => document.removeEventListener("touchmove", block);
+  }, []);
+
+  /**
+   * Con il mouse il trascinamento parte dopo pochi pixel; al tocco dopo una breve pressione, così lo scorrimento
+   * della pagina resta libero. Senza trascinamento è un tocco (anche da tastiera): `onTap`.
+   */
+  function grab(id: string, onTap: () => void): Grab {
+    return {
+      onContextMenu: (e) => e.preventDefault(),
+      onClick: (e) => { if (e.detail === 0) onTap(); },
+      onPointerDown: (e) => {
+        if (e.pointerType === "mouse" && e.button !== 0) return;
+        const touch = e.pointerType !== "mouse";
+        const x0 = e.clientX, y0 = e.clientY;
+        let state: "pending" | "drag" | "scroll" = "pending";
+        let timer = 0;
+        const zoneAt = (x: number, y: number) => (document.elementFromPoint(x, y)?.closest("[data-zone]") as HTMLElement | null)?.dataset.zone ?? null;
+        const begin = (x: number, y: number) => {
+          state = "drag";
+          dragging.current = true;
+          navigator.vibrate?.(15);
+          setDrag({ id, x, y, over: zoneAt(x, y) });
+        };
+        const onMove = (ev: PointerEvent) => {
+          if (state === "pending") {
+            if (Math.hypot(ev.clientX - x0, ev.clientY - y0) < 8) return;
+            if (touch) { state = "scroll"; clearTimeout(timer); return; }
+            begin(ev.clientX, ev.clientY);
+          }
+          if (state !== "drag") return;
+          // Scorrimento automatico verso il bordo a cui si sta andando (non quello da cui si è partiti).
+          if (ev.clientY > innerHeight - 110 && ev.clientY > y0 + 24) scrollBy(0, 14);
+          else if (ev.clientY < 100 && ev.clientY < y0 - 24) scrollBy(0, -14);
+          setDrag({ id, x: ev.clientX, y: ev.clientY, over: zoneAt(ev.clientX, ev.clientY) });
+        };
+        const finish = (ev: PointerEvent, cancelled: boolean) => {
+          clearTimeout(timer);
+          removeEventListener("pointermove", onMove);
+          removeEventListener("pointerup", onUp);
+          removeEventListener("pointercancel", onCancel);
+          dragging.current = false;
+          if (state === "drag") {
+            setDrag(null);
+            const zone = cancelled ? null : zoneAt(ev.clientX, ev.clientY);
+            if (zone) dropRef.current(id, zone);
+          } else if (state === "pending" && !cancelled) onTap();
+        };
+        const onUp = (ev: PointerEvent) => finish(ev, false);
+        const onCancel = (ev: PointerEvent) => finish(ev, true);
+        if (touch) timer = window.setTimeout(() => { if (state === "pending") begin(x0, y0); }, 250);
+        addEventListener("pointermove", onMove);
+        addEventListener("pointerup", onUp);
+        addEventListener("pointercancel", onCancel);
+      },
+    };
+  }
+  const over = drag?.over ?? null;
+  const dragged = drag ? byId.get(drag.id) : undefined;
+  const hot = (zone: string) => (over === zone ? "ring-2 ring-accent ring-offset-2 ring-offset-surface rounded-xl" : "");
 
   function toggleSuggestion() {
     if (suggested) {
@@ -356,12 +488,16 @@ function Editor({ teamId, proxyName, round, started, scored, cfg, current, last,
         )}
         {rows.map((r) => (
           <div key={r.role} className="flex justify-center gap-1">
-            {r.players.map((p) => <PitchPlayer key={p.id} p={p} badge={badgeOf(p.id)} onClick={() => setAction(p.id)} />)}
-            {Array.from({ length: r.empty }, (_, i) => <EmptySlot key={`e${i}`} role={r.role} onClick={() => setPicking({ role: r.role, replace: null, target: "starters" })} />)}
+            {r.players.map((p) => (
+              <PitchPlayer key={p.id} p={p} badge={badgeOf(p.id)} hot={over === `s:${p.id}`} lifted={drag?.id === p.id} handlers={grab(p.id, () => toReserves(p))} />
+            ))}
+            {Array.from({ length: r.empty }, (_, i) => (
+              <EmptySlot key={`e${i}`} role={r.role} hot={over === `slot:${r.role}`} onClick={() => setPicking({ role: r.role, replace: null, target: "starters" })} />
+            ))}
           </div>
         ))}
       </div>
-      <p className="-mt-2 px-1 text-[11px] text-muted">Sotto ogni giocatore la titolarità stimata da FootballLite (dati BSD). Tocca uno slot vuoto per scegliere chi schierare, un titolare per capitano, vice, panchina o sostituto.</p>
+      <p className="-mt-2 px-1 text-[11px] text-muted">Sotto ogni giocatore la titolarità stimata. Trascina un giocatore sul posto di un altro per scambiarli, su uno slot libero o in panchina; tocca un giocatore per mandarlo tra le riserve, uno slot vuoto per scegliere chi schierare.</p>
 
       {captainOn && (
         <div className="grid grid-cols-2 gap-3 text-sm">
@@ -380,31 +516,67 @@ function Editor({ teamId, proxyName, round, started, scored, cfg, current, last,
       {errors.length > 0 && <div className="rounded-xl border border-warn/40 bg-card/20 p-3 text-sm">{errors.map((e) => <div key={e}>{e}</div>)}</div>}
       {message && <div className={`rounded-xl border-l-4 p-3 text-sm font-medium ${message.ok ? "border-accent bg-accent/10 text-ink" : "border-danger bg-danger/10 text-danger"}`}>{message.text}</div>}
 
-      <Card title={`Panchina ${bench.length}/${cfg.benchCount}`} className="">
-        <p className="mb-2 text-[11px] text-muted">L'ordine conta per le sostituzioni{cfg.benchPerRole ? ` (${cfg.benchPerRole.map((n, i) => `${n} ${["P", "D", "C", "A"][i]}`).join(", ")})` : ""}.</p>
-        <ol className="flex flex-col divide-y divide-line">
-          {benchRows.map((p, i) => (
-            <li key={p.id} className="flex items-center gap-2 py-1.5">
-              <span className="flex size-5 items-center justify-center rounded-full bg-surface-2 text-[11px] font-bold text-muted tabular">{i + 1}</span>
-              <RoleTag role={p.role} />
-              <button className="flex min-w-0 flex-1 items-center gap-2 text-left text-sm" onClick={() => setAction(p.id)}>
-                <span className="truncate">{p.name}</span><span className="truncate text-xs text-muted">{p.outlook?.opponent ?? ""}</span>
-              </button>
-              <StarterPercent percent={p.starterPercent} />
-              <button aria-label={`Sposta su ${p.name}`} className="px-1 text-muted disabled:opacity-30" disabled={i === 0} onClick={() => setBench(move(bench, i, i - 1))}>▲</button>
-              <button aria-label={`Sposta giù ${p.name}`} className="px-1 text-muted disabled:opacity-30" disabled={i === bench.length - 1} onClick={() => setBench(move(bench, i, i + 1))}>▼</button>
-              <button aria-label={`Togli ${p.name}`} className="px-1 text-muted" onClick={() => removePlayer(p.id)}>✕</button>
-            </li>
-          ))}
-          {Array.from({ length: Math.max(0, cfg.benchCount - bench.length) }, (_, i) => (
-            <li key={`b${i}`} className="py-1.5">
-              <button className="flex w-full items-center gap-2 rounded-lg border border-dashed border-line px-2 py-1.5 text-left text-sm text-muted hover:border-accent" onClick={() => setPicking({ role: 0, replace: null, target: "bench" })}>
-                <span className="w-5 text-xs tabular">{bench.length + i + 1}</span><span>Aggiungi panchinaro</span>
-              </button>
-            </li>
-          ))}
-        </ol>
-      </Card>
+      <div data-zone="bench" className={hot("bench")}>
+        <Card title={`In panchina ${bench.length}/${cfg.benchCount}`}>
+          <p className="mb-2 text-[11px] text-muted">L'ordine conta per le sostituzioni{cfg.benchPerRole ? ` (${cfg.benchPerRole.map((n, i) => `${n} ${["P", "D", "C", "A"][i]}`).join(", ")})` : ""}: trascina un panchinaro per cambiarne la posizione.</p>
+          <ol className="flex flex-col divide-y divide-line">
+            {benchRows.map((p, i) => (
+              <li key={p.id} data-zone={`b:${i}`} className={`flex items-center gap-2 py-1.5 ${hot(`b:${i}`)} ${drag?.id === p.id ? "opacity-40" : ""}`}>
+                <span className="flex size-5 shrink-0 items-center justify-center rounded-full bg-surface-2 text-[11px] font-bold text-muted tabular">{i + 1}</span>
+                <button {...grab(p.id, () => toReserves(p))} className="draggable flex min-w-0 flex-1 cursor-grab items-center gap-2 text-left text-sm" aria-label={`${p.name}: trascina per spostarlo, tocca per mandarlo tra le riserve`}>
+                  <RoleTag role={p.role} />
+                  <span className="truncate font-medium">{p.name}</span><span className="truncate text-xs text-muted">{p.outlook?.opponent ?? ""}</span>
+                </button>
+                {!p.info.ext_id && canMatch ? <MatchButton name={p.name} onClick={() => setAction(p.id)} /> : <StarterPercent percent={p.starterPercent} />}
+                <InfoButton name={p.name} onClick={() => setAction(p.id)} />
+              </li>
+            ))}
+            {Array.from({ length: Math.max(0, cfg.benchCount - bench.length) }, (_, i) => (
+              <li key={`b${i}`} className="py-1.5">
+                <button className="flex w-full items-center gap-2 rounded-lg border border-dashed border-line px-2 py-1.5 text-left text-sm text-muted hover:border-accent" onClick={() => setPicking({ role: 0, replace: null, target: "bench" })}>
+                  <span className="w-5 text-xs tabular">{bench.length + i + 1}</span><span>Aggiungi panchinaro</span>
+                </button>
+              </li>
+            ))}
+          </ol>
+        </Card>
+      </div>
+
+      <div data-zone="reserve" className={hot("reserve")}>
+        <Card title={`Riserve ${free.length}`}>
+          <p className="mb-2 text-[11px] text-muted">Giocatori della rosa non schierati. Tocca una riserva per schierarla (in campo nel suo ruolo, altrimenti in panchina) o trascinala sul posto di un giocatore; trascina qui uno schierato per toglierlo.</p>
+          {unmatched > 0 && unmatched < scored.length && canMatch && (
+            <p className="mb-2 rounded-lg border border-warn/40 bg-card/20 p-2 text-[11px]">
+              {unmatched === 1 ? "1 giocatore non è abbinato" : `${unmatched} giocatori non sono abbinati`} alla fonte dati (senza titolarità): l'automatico non ha potuto decidere da solo. Tocca «Abbina» per scegliere tra i candidati.
+            </p>
+          )}
+          {!free.length && <Empty>Tutti i giocatori della rosa sono schierati.</Empty>}
+          {ROLES.map((role) => {
+            const list = free.filter((p) => p.role === role).sort((a, b) => b.score - a.score || (b.cost ?? 0) - (a.cost ?? 0));
+            if (!list.length) return null;
+            return (
+              <div key={role} className="mb-3">
+                <div className="-mx-4 mb-1 flex items-center justify-between border-y border-line bg-surface-2 px-4 py-1.5 text-xs text-muted"><span className="flex items-center gap-2 text-[13px] font-bold text-ink"><RoleTag role={role} size={18} />{ROLE_NAME[role]}</span><span>{startersOf(role).length}/{want[role]} in campo</span></div>
+                <ul className="flex flex-col divide-y divide-line">
+                  {list.map((p) => (
+                    <li key={p.id} className={`flex items-center gap-2 py-1.5 text-sm ${drag?.id === p.id ? "opacity-40" : ""}`}>
+                      <button {...grab(p.id, () => addPlayer(p.id))} className="draggable flex min-w-0 flex-1 cursor-grab items-center gap-2 text-left" aria-label={`Schiera ${p.name}`}>
+                        <PlayerAvatar name={p.name} role={p.role} size={32} />
+                        <span className="min-w-0 flex-1">
+                          <span className="block truncate font-medium">{p.name}</span>
+                          <span className="block truncate text-xs text-muted">{[p.info.ext_team, p.outlook?.opponent, statusText(p.outlook)].filter(Boolean).join(" · ")}</span>
+                        </span>
+                      </button>
+                      {!p.info.ext_id && canMatch ? <MatchButton name={p.name} onClick={() => setAction(p.id)} /> : <StarterPercent percent={p.starterPercent} />}
+                      <InfoButton name={p.name} onClick={() => setAction(p.id)} />
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            );
+          })}
+        </Card>
+      </div>
 
       <div className="sticky bottom-[calc(4.5rem+env(safe-area-inset-bottom))] z-20">
         <Button variant={started && !proxyName ? "danger" : "card"} className="w-full py-3 text-base shadow-lg" disabled={saving || errors.length > 0} onClick={() => save(false)}>
@@ -412,54 +584,17 @@ function Editor({ teamId, proxyName, round, started, scored, cfg, current, last,
         </Button>
       </div>
 
-      <Card title="Rosa">
-        <p className="mb-2 text-[11px] text-muted">Tocca un giocatore per schierarlo (in campo nel suo ruolo, altrimenti in panchina) o per toglierlo dalla formazione.</p>
-        {unmatched > 0 && unmatched < scored.length && canMatch && (
-          <p className="mb-2 rounded-lg border border-warn/40 bg-card/20 p-2 text-[11px]">
-            {unmatched === 1 ? "1 giocatore non è abbinato" : `${unmatched} giocatori non sono abbinati`} alla fonte dati (senza titolarità): l'automatico non ha potuto decidere da solo. Tocca «Abbina» per scegliere tra i candidati.
-          </p>
-        )}
-        {ROLES.map((role) => {
-          const list = scored.filter((p) => p.role === role).sort((a, b) => Number(!!stateOf(b.id)) - Number(!!stateOf(a.id)) || b.score - a.score || (b.cost ?? 0) - (a.cost ?? 0));
-          if (!list.length) return null;
-          return (
-            <div key={role} className="mb-3">
-              <div className="-mx-4 mb-1 flex items-center justify-between bg-surface-2 px-4 py-1.5 text-xs text-muted"><span className="flex items-center gap-2 text-[13px] font-bold text-ink"><RoleTag role={role} size={18} />{ROLE_NAME[role]}</span><span>{startersOf(role).length}/{want[role]} in campo</span></div>
-              <ul className="flex flex-col divide-y divide-line">
-                {list.map((p) => {
-                  const st = stateOf(p.id);
-                  return (
-                    <li key={p.id} className="flex items-center gap-2 py-1.5 text-sm">
-                      <button onClick={() => (st ? removePlayer(p.id) : addPlayer(p.id))} className="flex min-w-0 flex-1 items-center gap-2 text-left" aria-label={st ? `Togli ${p.name}` : `Schiera ${p.name}`}>
-                        <PlayerAvatar name={p.name} role={p.role} size={32} />
-                        <span className="min-w-0 flex-1">
-                          <span className="block truncate font-medium">{p.name}{badgeOf(p.id) && <span className="ml-1 rounded bg-card px-1 text-[10px] font-bold text-card-ink">{badgeOf(p.id)}</span>}</span>
-                          <span className="block truncate text-xs text-muted">{[p.info.ext_team, p.outlook?.opponent, statusText(p.outlook)].filter(Boolean).join(" · ")}</span>
-                        </span>
-                      </button>
-                      {!p.info.ext_id && canMatch
-                        ? <button onClick={() => setAction(p.id)} className="rounded-full border border-warn/60 bg-card/20 px-2 text-[11px] font-bold leading-4" aria-label={`Abbina ${p.name} alla fonte dati`}>Abbina</button>
-                        : <StarterPercent percent={p.starterPercent} />}
-                      <span className={`w-20 shrink-0 rounded-full py-0.5 text-center text-[11px] font-extrabold ${st ? (st === "Titolare" ? "bg-accent text-accent-ink" : "bg-surface-2 text-muted") : "border border-accent text-accent"}`}>{st ?? "Schiera"}</span>
-                    </li>
-                  );
-                })}
-              </ul>
-            </div>
-          );
-        })}
-      </Card>
+      {drag && dragged && (
+        <div className="pointer-events-none fixed z-[60] -translate-x-1/2 -translate-y-1/2 drop-shadow-xl" style={{ left: drag.x, top: drag.y }} aria-hidden>
+          <PlayerAvatar name={dragged.name} role={dragged.role} size={54} />
+        </div>
+      )}
 
       <Sheet open={!!acting} onClose={() => { setAction(null); setMatchFound(null); setMatchQuery(""); }} title={acting?.name ?? ""}>
         {acting && (
           <div className="flex flex-col gap-2">
             <p className="text-xs text-muted">{[ROLE_NAME[acting.role], acting.info.ext_team, acting.outlook?.opponent, statusText(acting.outlook)].filter(Boolean).join(" · ")} · FM stimata {fmt(acting.expectedFantavote, 2)}</p>
-            {captainOn && starters.includes(acting.id) && <Button variant="ghost" onClick={() => { if (vice === acting.id) setVice(captain); setCaptain(acting.id); setAction(null); }}>Capitano</Button>}
-            {captainOn && starters.includes(acting.id) && <Button variant="ghost" onClick={() => { if (captain === acting.id) setCaptain(vice); setVice(acting.id); setAction(null); }}>Vice capitano</Button>}
-            {starters.includes(acting.id) && <Button variant="ghost" onClick={() => { setAction(null); setPicking({ role: acting.role, replace: acting.id, target: "starters" }); }}>Sostituisci con…</Button>}
-            {starters.includes(acting.id) && <Button variant="ghost" onClick={() => toBench(acting.id)}>Sposta in panchina</Button>}
-            {bench.includes(acting.id) && startersOf(acting.role).length < want[acting.role] && <Button variant="ghost" onClick={() => { setBench(bench.filter((x) => x !== acting.id)); setStarters([...starters, acting.id]); setAction(null); }}>Metti in campo</Button>}
-            {(starters.includes(acting.id) || bench.includes(acting.id)) && <Button variant="danger" onClick={() => removePlayer(acting.id)}>Togli dalla formazione</Button>}
+            <p className="text-sm">{stateOf(acting.id) ?? "Tra le riserve"}{badgeOf(acting.id) ? ` · ${badgeOf(acting.id) === "C" ? "capitano" : "vice capitano"}` : ""} · titolarità <StarterPercent percent={acting.starterPercent} /></p>
             {!acting.info.ext_id && canMatch && (
               <div className="mt-2 rounded-xl border border-warn/40 bg-card/10 p-3">
                 <p className="mb-2 text-sm font-semibold">Abbina alla fonte dati</p>
@@ -483,7 +618,7 @@ function Editor({ teamId, proxyName, round, started, scored, cfg, current, last,
         )}
       </Sheet>
 
-      <Sheet open={!!picking} onClose={() => setPicking(null)} title={picking?.replace ? "Sostituisci con" : picking?.target === "bench" ? "Aggiungi in panchina" : `Scegli ${picking ? ROLE_NAME[picking.role]?.toLowerCase().replace(/i$/, "e") : ""}`}>
+      <Sheet open={!!picking} onClose={() => setPicking(null)} title={picking?.replace ? "Sostituisci con" : picking?.target === "bench" ? "Aggiungi in panchina" : `Scegli ${picking ? SINGULAR[picking.role] ?? "" : ""}`}>
         {candidates.length === 0 && <Empty>Nessun giocatore disponibile per questo slot.</Empty>}
         <ul className="flex flex-col gap-1">
           {candidates.map((p) => (
@@ -525,23 +660,11 @@ function Editor({ teamId, proxyName, round, started, scored, cfg, current, last,
   );
 }
 
-function statusText(o?: Outlook): string {
-  if (!o) return "Non abbinato alla fonte dati";
-  if (o.unavailable === "injury") return "Infortunato";
-  if (o.unavailable === "suspension") return "Squalificato";
-  if (o.unavailable) return "Indisponibile";
-  if (o.doubtful) return "In dubbio";
-  if (o.confirmed && o.predicted === "starter") return "Titolare ufficiale";
-  if (o.confirmed && o.predicted === "bench") return "In panchina (ufficiale)";
-  if (o.predicted === "starter") return "Probabile titolare";
-  if (o.predicted === "bench") return "Probabile panchina";
-  return "";
-}
-
-function PitchPlayer({ p, badge, onClick }: { p: Row; badge: "C" | "VC" | null; onClick: () => void }) {
+function PitchPlayer({ p, badge, hot, lifted, handlers }: { p: Row; badge: "C" | "VC" | null; hot: boolean; lifted: boolean; handlers: Grab }) {
   const low = !Number.isNaN(p.starterPercent) && p.starterPercent < 70;
   return (
-    <button onClick={onClick} className="flex w-[72px] flex-col items-center gap-0.5 text-center" aria-label={`${p.name}: opzioni`}>
+    <button {...handlers} data-zone={`s:${p.id}`} aria-label={`${p.name}: trascina per spostarlo, tocca per mandarlo tra le riserve`}
+      className={`draggable flex w-[72px] cursor-grab flex-col items-center gap-0.5 rounded-xl py-0.5 text-center transition ${hot ? "bg-white/25 ring-2 ring-card" : ""} ${lifted ? "opacity-40" : ""}`}>
       <span className="relative">
         <PlayerAvatar name={p.name} role={p.role} size={46} />
         {badge && <span className="absolute -right-1.5 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-card px-1 text-[10px] font-extrabold text-card-ink shadow">{badge}</span>}
@@ -557,12 +680,26 @@ function PitchPlayer({ p, badge, onClick }: { p: Row; badge: "C" | "VC" | null; 
 }
 
 /** Slot del modulo ancora vuoto: un tocco apre la scelta del giocatore per quel ruolo. */
-function EmptySlot({ role, onClick }: { role: number; onClick: () => void }) {
+function EmptySlot({ role, hot, onClick }: { role: number; hot: boolean; onClick: () => void }) {
   const letter = ["", "P", "D", "C", "A"][role];
   return (
-    <button onClick={onClick} className="flex w-[72px] flex-col items-center gap-0.5 text-center text-white" aria-label={`Slot vuoto ${ROLE_NAME[role]}: scegli`}>
+    <button onClick={onClick} data-zone={`slot:${role}`} className={`flex w-[72px] flex-col items-center gap-0.5 rounded-xl py-0.5 text-center text-white transition ${hot ? "bg-white/25 ring-2 ring-card" : ""}`} aria-label={`Slot vuoto ${ROLE_NAME[role]}: scegli`}>
       <span className="flex size-[46px] items-center justify-center rounded-full border-2 border-dashed border-white/80 bg-white/15 text-xl font-extrabold">+</span>
       <span className="mt-0.5 w-full rounded-md bg-black/25 px-1 text-[11px] font-extrabold leading-[18px]">{letter} · Scegli</span>
+    </button>
+  );
+}
+
+/** Abbinamento alla fonte dati (giocatori su cui l'automatico non ha potuto decidere). */
+function MatchButton({ name, onClick }: { name: string; onClick: () => void }) {
+  return <button onClick={onClick} className="shrink-0 rounded-full border border-warn/60 bg-card/20 px-2 text-[11px] font-bold leading-4" aria-label={`Abbina ${name} alla fonte dati`}>Abbina</button>;
+}
+
+/** Scheda del giocatore: stato, abbinamento e notizie. */
+function InfoButton({ name, onClick }: { name: string; onClick: () => void }) {
+  return (
+    <button onClick={onClick} className="shrink-0 rounded-full p-1 text-muted hover:bg-surface-2 hover:text-ink" aria-label={`Dettagli di ${name}`}>
+      <svg viewBox="0 0 24 24" className="size-4" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" aria-hidden><circle cx="12" cy="12" r="9" /><path d="M12 11v5M12 7.5v.5" /></svg>
     </button>
   );
 }

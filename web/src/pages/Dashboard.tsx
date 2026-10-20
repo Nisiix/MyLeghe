@@ -73,7 +73,7 @@ function RoundCard({ round }: { round: Round }) {
               {lineups.isLoading ? "Verifica…" : myLineup ? `✓ Formazione inserita${myLineup.forced ? " · modificata a giornata iniziata" : ""}` : "Formazione non ancora inserita"}
             </div>
           ) : (
-            <p className="mt-3 text-xs text-chalk/80">Scegli il tuo utente nelle <Link to="/impostazioni" className="underline">impostazioni</Link> per schierare.</p>
+            <p className="mt-3 text-xs text-chalk/80">Scegli il tuo utente nelle <Link to="/utente" className="underline">impostazioni utente</Link> per schierare.</p>
           )}
         </div>
         {started ? (
@@ -220,7 +220,6 @@ function RiskCard() {
           {s.admin && <> Stato in <Link to="/admin" className="underline">Admin → Abbinamenti</Link>.</>}
         </p>
       )}
-      <p className="mt-2 text-[11px] text-muted">Titolarità stimata da FootballLite su dati BSD (formazioni probabili/ufficiali, indisponibili, ultime partite).</p>
     </Card>
   );
 }
@@ -240,7 +239,6 @@ function SerieACard({ round }: { round: Round }) {
           </li>
         ))}
       </ul>
-      <p className="mt-2 text-[11px] text-muted">Dati: football-data.org</p>
     </Card>
   );
 }

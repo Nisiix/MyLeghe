@@ -85,7 +85,7 @@ export function LivePage() {
             );
           })}
         </ul>
-        <p className="mt-2 text-[11px] text-muted">{simulate ? "Risultati stimati (chi deve ancora giocare vale 6)." : "Punteggi parziali con i voti già arrivati."} Voti stimati da FootballLite su statistiche BSD: non sono i voti ufficiali. I risultati ufficiali compaiono quando l'admin reimporta il calendario da Leghe Fantacalcio{calendar.importedAt ? ` (ultimo import: ${new Date(calendar.importedAt).toLocaleString("it-IT", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })})` : ""}.</p>
+        <p className="mt-2 text-[11px] text-muted">{simulate ? "Risultati stimati (chi deve ancora giocare vale 6)." : "Punteggi parziali con i voti già arrivati."} Voti stimati da FootballLite: non sono i voti ufficiali. I risultati ufficiali compaiono quando l'admin reimporta il calendario da Leghe Fantacalcio{calendar.importedAt ? ` (ultimo import: ${new Date(calendar.importedAt).toLocaleString("it-IT", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })})` : ""}.</p>
       </Card>
 
       {editing && (

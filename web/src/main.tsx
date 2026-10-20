@@ -10,8 +10,14 @@ import { AdminPage } from "./pages/Admin";
 import { Dashboard } from "./pages/Dashboard";
 import { LineupPage } from "./pages/Lineup";
 import { LivePage } from "./pages/Live";
-import { SettingsPage } from "./pages/Settings";
+import { InfoPage } from "./pages/Info";
+import { NotificationsPage } from "./pages/Notifications";
+import { RostersPage } from "./pages/Rosters";
+import { UserPage } from "./pages/User";
+import { applyTheme } from "./lib/theme";
 import "./styles.css";
+
+applyTheme();
 
 // Aggiornamento dell'app: oltre al controllo all'apertura, si ricontrolla quando l'app torna in primo piano
 // e ogni ora, così dopo un deploy la versione nuova arriva anche a chi tiene l'app sempre aperta.
@@ -46,7 +52,11 @@ function App() {
         <Route path="formazione" element={<LineupPage />} />
         <Route path="live" element={<LivePage />} />
         <Route path="admin" element={<AdminPage />} />
-        <Route path="impostazioni" element={<SettingsPage />} />
+        <Route path="rose" element={<RostersPage />} />
+        <Route path="utente" element={<UserPage />} />
+        <Route path="notifiche" element={<NotificationsPage />} />
+        <Route path="informazioni" element={<InfoPage />} />
+        <Route path="impostazioni" element={<Navigate to="/utente" replace />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

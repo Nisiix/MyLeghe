@@ -1,68 +1,19 @@
 import { DEFAULT_NOTIFY, type NotifyPrefs } from "@footballlite/core";
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
-import { Button, Card, ErrorBox } from "../components/ui";
-import { unlinkTeam } from "../lib/api";
-import { useLeague } from "../lib/data";
+import { Link } from "react-router-dom";
+import { Button, Card, Empty } from "../components/ui";
 import { deviceId, enablePush, getNotify, pushSupported, saveNotify } from "../lib/push";
-import { session, useSession } from "../lib/session";
+import { useSession } from "../lib/session";
 
-export function SettingsPage() {
+export function NotificationsPage() {
   const s = useSession();
-  const league = useLeague();
-  const navigate = useNavigate();
-  const [error, setError] = useState<unknown>(null);
-  const names = new Map(league.data?.teams.map((t) => [t.id, t.name]));
-
-  /** Scollega la squadra della rosa dal profilo: alla prossima apertura si sceglie di nuovo la squadra. */
-  async function unlink() {
-    const team = s?.myTeamId ? names.get(s.myTeamId) ?? "la squadra" : "la squadra";
-    if (!confirm(`Scollegare ${team} dal tuo profilo? Potrai collegare di nuovo una squadra libera.`)) return;
-    setError(null);
-    try { await unlinkTeam(); navigate("/accesso"); } catch (e) { setError(e); }
-  }
-
   return (
     <div className="flex flex-col gap-4">
-      <h1 className="px-1 text-2xl font-extrabold leading-none">Altro</h1>
-
-      <Card title="Il tuo utente">
-        {s?.userId ? (
-          <>
-            <p className="mb-1 text-sm"><b>@{s.username}</b> · {s.myTeamId ? <>squadra <b>{names.get(s.myTeamId) ?? "—"}</b></> : "nessuna squadra collegata"}</p>
-            <p className="mb-3 text-xs text-muted">La squadra collegata non si cambia: puoi scollegarla e poi collegare una squadra libera. L'accesso resta memorizzato su questo dispositivo fino al prossimo login da un altro dispositivo.</p>
-            <div className="flex flex-wrap gap-2">
-              {s.myTeamId && <Button variant="ghost" onClick={unlink}>Scollega utente da rosa</Button>}
-              {!s.myTeamId && <Button variant="ghost" onClick={() => navigate("/accesso")}>Collega una squadra</Button>}
-              <Button variant="ghost" onClick={() => { session.leaveProfile(); navigate("/accesso"); }}>Esci dal profilo</Button>
-            </div>
-            {!!error && <div className="mt-3"><ErrorBox error={error} /></div>}
-          </>
-        ) : (
-          <>
-            <p className="mb-3 text-sm">Nessun profilo collegato: puoi solo guardare.</p>
-            <Button variant="ghost" onClick={() => navigate("/accesso")}>Entra con il tuo profilo</Button>
-          </>
-        )}
-      </Card>
-
-      {s?.myTeamId && <NotifyCard teamId={s.myTeamId} />}
-
-      <Card title="Account">
-        <Button variant="danger" onClick={() => { session.logout(); navigate("/accesso", { replace: true }); }}>Esci da questo dispositivo</Button>
-      </Card>
-
-      <Card title="Fonti dei dati">
-        <ul className="flex flex-col gap-1 text-xs text-muted">
-          <li>Rose e calendario: file importati dall'admin della lega.</li>
-          <li>Calendario, orari e classifica di Serie A: football-data.org.</li>
-          <li>Giocatori, indisponibili, formazioni probabili e ufficiali, statistiche e cronaca: BSD, sports.bzzoiro.com.</li>
-          <li>Titolarità, formazione consigliata e voti live sono stime calcolate da FootballLite: non sono i voti ufficiali.</li>
-          <li>Font Archivo, SIL Open Font License 1.1.</li>
-          <li>FootballLite non è affiliata a Leghe Fantacalcio® né a Fantacalcio S.r.l.</li>
-        </ul>
-      </Card>
+      <h1 className="px-1 text-2xl font-extrabold leading-none">Notifiche</h1>
+      {s?.myTeamId
+        ? <NotifyCard teamId={s.myTeamId} />
+        : <Card><Empty>Le notifiche riguardano la tua squadra: collegala dalle <Link to="/utente" className="underline">impostazioni utente</Link>.</Empty></Card>}
     </div>
   );
 }
@@ -91,7 +42,7 @@ function NotifyCard({ teamId }: { teamId: number }) {
 
   if (!pushSupported()) return <Card title="Notifiche"><p className="text-sm text-muted">Questo browser non supporta le notifiche push. Su iPhone aggiungi FootballLite alla schermata Home e aprila da lì.</p></Card>;
   return (
-    <Card title="Notifiche" action={
+    <Card title="Notifiche push" action={
       <label className="flex items-center gap-2 text-sm">Attive <input type="checkbox" className={box} checked={prefs.enabled} onChange={(e) => save({ ...prefs, enabled: e.target.checked })} /></label>
     }>
       <div className={`flex flex-col gap-3 text-sm ${prefs.enabled ? "" : "opacity-60"}`}>

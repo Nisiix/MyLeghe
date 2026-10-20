@@ -10,17 +10,21 @@
 }
 
 /*
-  Identità ispirata alle app di lega di fantacalcio: barra blu notte, fondo grigio chiaro, schede bianche,
+  Colori come in Leghe Fantacalcio: fondo grigio chiaro, schede bianche con bordo grigio sottile, barra blu notte,
   verde per le azioni, campo verde a strisce, colori di ruolo P arancio / D verde / C blu / A rosso.
-  I nomi dei token restano quelli storici (pitch, card, chalk…) così le pagine non cambiano classi.
+  In tema scuro fondo quasi nero e schede grigio antracite con bordi grigi, come nella modalità scura dell'app.
+  I valori sono ricavati dall'aspetto dell'app (non esiste una palette pubblica): si cambiano solo qui.
+  Il tema scuro si attiva con la classe "dark" su <html> (interruttore nel menu, all'inizio segue il sistema).
 */
+@custom-variant dark (&:where(.dark, .dark *));
+
 @theme {
-  --color-bg: #eef1f6;
+  --color-bg: #f0f2f5;
   --color-surface: #ffffff;
-  --color-surface-2: #f4f6fa;
-  --color-line: #dfe4ec;
-  --color-ink: #13203b;
-  --color-muted: #69778f;
+  --color-surface-2: #f6f7f9;
+  --color-line: #e1e4e9;
+  --color-ink: #1a2233;
+  --color-muted: #6a7486;
   --color-brand: #0f2350;
   --color-brand-2: #1a3570;
   --color-brand-ink: #ffffff;
@@ -41,24 +45,24 @@
   --font-sans: "Archivo", ui-sans-serif, system-ui, sans-serif;
 }
 
-/* Tema scuro: stessa struttura, blu notte al posto del grigio. */
-@media (prefers-color-scheme: dark) {
-  :root {
-    --color-bg: #08122a;
-    --color-surface: #101d3b;
-    --color-surface-2: #17274b;
-    --color-line: #24365e;
-    --color-ink: #e9eef8;
-    --color-muted: #93a1bd;
-    --color-brand: #0a1838;
-    --color-brand-2: #142a5a;
-    --color-accent: #32c266;
-    --color-accent-ink: #05210f;
-    --color-pitch: #23733a;
-    --color-pitch-deep: #0a1838;
-    --color-warn: #f5a524;
-    --color-info: #5aa9f0;
-  }
+:root { color-scheme: light; }
+:root.dark {
+  color-scheme: dark;
+  --color-bg: #111317;
+  --color-surface: #1b1e24;
+  --color-surface-2: #23272e;
+  --color-line: #2f343c;
+  --color-ink: #e9ecf1;
+  --color-muted: #9aa3b0;
+  --color-brand: #161a21;
+  --color-brand-2: #1f2a3d;
+  --color-accent: #2fbf62;
+  --color-accent-ink: #05210f;
+  --color-pitch: #24723a;
+  --color-pitch-deep: #161a21;
+  --color-warn: #f5a524;
+  --color-danger: #ef4b47;
+  --color-info: #5aa9f0;
 }
 
 html, body, #root { height: 100%; }
@@ -121,8 +125,13 @@ body {
 }
 .pitch > * { position: relative; z-index: 1; }
 
-/* Ombra morbida delle schede, come nelle app di lega. */
-.shadow-card { box-shadow: 0 1px 2px rgba(15, 35, 80, 0.06), 0 2px 8px rgba(15, 35, 80, 0.06); }
+/* Schede come in Leghe Fantacalcio: bordo grigio sottile e ombra appena accennata (solo bordo in tema scuro). */
+.shadow-card { border: 1px solid var(--color-line); box-shadow: 0 1px 2px rgba(15, 35, 80, 0.05); }
+.dark .shadow-card { box-shadow: none; }
+.dark .hero { box-shadow: none; border: 1px solid var(--color-line); }
+
+/* Trascinamento dei giocatori nella formazione: niente selezione del testo né menu del tocco prolungato. */
+.draggable { user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; touch-action: manipulation; }
 
 :focus-visible { outline: 3px solid var(--color-info); outline-offset: 2px; }
 

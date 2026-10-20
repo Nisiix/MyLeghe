@@ -108,3 +108,27 @@ export function useCalendar() {
   });
   return { ...q, data: q.data?.rows, importedAt: q.data?.importedAt ?? null };
 }
+
+/** Stato dei dati sincronizzati su Cloudflare: `issues` spiega perché qualcosa non arriva. */
+export interface DataStatus {
+  ok: boolean;
+  issues: string[];
+  lastSync: { at: number; ok: boolean; error: string | null } | null;
+  players: number;
+  playersUpdatedAt: number | null;
+  requestsToday: number;
+  requestsBudget: number;
+  myRoster: { total: number; unmatched: number } | null;
+}
+
+export function useDataStatus() {
+  const s = useSession();
+  return useQuery({
+    queryKey: ["status", s?.league.id],
+    enabled: !!s,
+    queryFn: () => api<DataStatus>("/league/status"),
+    staleTime: 2 * MIN,
+    refetchInterval: 5 * MIN,
+    retry: 0,
+  });
+}
