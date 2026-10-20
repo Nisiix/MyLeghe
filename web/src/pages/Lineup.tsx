@@ -527,7 +527,8 @@ function Editor({ teamId, proxyName, round, deadline, started, liveLabel, scored
             <h1 className="scoreboard truncate text-xl leading-tight">{proxyName ? `Formazione di ${proxyName}` : "Inserisci formazione"}</h1>
             <p className="text-xs text-white/75">{round}ª giornata · {started ? "giornata iniziata" : `consegna entro ${deadlineText}`}</p>
           </div>
-          <div className="shrink-0 text-right">
+          <div className="flex shrink-0 flex-col items-end text-right">
+            <button onClick={() => { setPasting(true); setPasteError(null); }} className="mb-1 rounded-full border border-white/50 px-2.5 py-0.5 text-[11px] font-bold hover:bg-white/10">Importa rosa</button>
             {!started && <div className="mb-0.5 inline-block rounded-full bg-white/15 px-2 py-0.5 text-[11px] font-bold tabular">− {formatCountdown(deadline - now)}</div>}
             <div className="text-[11px] text-white/70">Punteggio atteso <b className="scoreboard tabular text-base text-white">{fmt(expected)}</b></div>
           </div>
@@ -536,7 +537,6 @@ function Editor({ teamId, proxyName, round, deadline, started, liveLabel, scored
           <Link to="/live" className="flex flex-1 items-center justify-center gap-1.5 rounded-full border border-white/50 px-2 py-2 text-sm font-bold hover:bg-white/10">
             {liveLabel === "Live" && <span className="size-2 animate-pulse rounded-full bg-danger" aria-hidden />}{liveLabel}
           </Link>
-          <button onClick={() => { setPasting(true); setPasteError(null); }} className="flex-1 rounded-full border border-white/50 px-2 py-2 text-sm font-bold hover:bg-white/10">Importa rosa</button>
           <button type="button" aria-pressed={!!suggested} onClick={toggleSuggestion}
             className={`flex flex-1 items-center justify-center gap-1.5 rounded-full border px-2 py-2 text-sm font-bold transition ${suggested ? "border-card bg-card text-card-ink" : "border-white/50 hover:bg-white/10"}`}>
             <svg viewBox="0 0 24 24" className="size-4" fill={suggested ? "currentColor" : "none"} stroke="currentColor" strokeWidth={2} aria-hidden><path d="M12 3l2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1-4.4-4.3 6.1-.9z" /></svg>
