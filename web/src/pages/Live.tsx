@@ -50,7 +50,7 @@ export function LivePage() {
         <Link to="/formazione" className="text-center text-sm font-semibold text-danger underline">Modifica formazione (giornata iniziata)</Link>
       )}
 
-      <TeamsPanel match={match} names={names} data={data} lineupOf={lineupOf} calc={calc} outlook={outlook.data?.players} live={live.data} />
+      <TeamsPanel match={match} names={names} data={data} lineupOf={lineupOf} calc={calc} outlook={outlook.data?.players} live={live.data} myTeamId={s?.myTeamId ?? null} />
 
       <Card title="Altri punteggi">
         <ul className="flex flex-col divide-y divide-line">
@@ -58,14 +58,15 @@ export function LivePage() {
             const h = calc(m.home_team_id), a = calc(m.away_team_id);
             const hp = h ? (simulate ? h.projection.total : h.partial) : null;
             const ap = a ? (simulate ? a.projection.total : a.partial) : null;
+            const both = hp !== null && ap !== null;
             return (
               <li key={m.home_team_id}>
                 <button onClick={() => setParams({ partita: String(m.home_team_id) })} className="grid w-full grid-cols-[1fr_auto_1fr] items-center gap-2 py-2.5 text-left text-sm">
-                  <span className="truncate">{names.get(m.home_team_id)}</span>
+                  <span className="truncate">{names.get(m.home_team_id)}{h === null && <span className="block text-[10px] text-danger">formazione mancante</span>}</span>
                   <span className="tabular text-center">
-                    {hp !== null && ap !== null ? <><b className="scoreboard text-lg">{goals(hp, cfg)}-{goals(ap, cfg)}</b><span className="block text-[10px] text-muted">{fmt(hp)} – {fmt(ap)}</span></> : <span className="text-xs text-muted">formazioni non visibili</span>}
+                    {both ? <><b className="scoreboard text-lg">{goals(hp, cfg)}-{goals(ap, cfg)}</b><span className="block text-[10px] text-muted">{fmt(hp)} – {fmt(ap)}</span></> : <span className="text-[10px] text-muted">{hp !== null ? fmt(hp) : ""} – {ap !== null ? fmt(ap) : ""}</span>}
                   </span>
-                  <span className="truncate text-right">{names.get(m.away_team_id)}</span>
+                  <span className="truncate text-right">{names.get(m.away_team_id)}{a === null && <span className="block text-[10px] text-danger">formazione mancante</span>}</span>
                 </button>
               </li>
             );
@@ -89,8 +90,9 @@ function Scoreboard({ match, names, home, away, simulate, cfg, phase }: { match:
       <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-3 text-center">
         <Side id={match.home_team_id} name={names.get(match.home_team_id) ?? ""} />
         <div className="tabular">
+          {/* Senza una delle due formazioni non si mostra alcun risultato, solo i punti della squadra che c'è. */}
           <div className="scoreboard text-5xl leading-none">{hp !== null && ap !== null ? `${goals(hp, cfg)}-${goals(ap, cfg)}` : "–"}</div>
-          <div className="mt-1 text-xs text-chalk/75">{fmt(hp)} – {fmt(ap)}</div>
+          <div className="mt-1 text-xs text-chalk/75">{hp !== null ? fmt(hp) : ""} – {ap !== null ? fmt(ap) : ""}</div>
         </div>
         <Side id={match.away_team_id} name={names.get(match.away_team_id) ?? ""} />
       </div>
@@ -107,9 +109,9 @@ function Side({ id, name }: { id: number; name: string }) {
   );
 }
 
-function TeamsPanel({ match, names, data, lineupOf, calc, outlook, live }: {
+function TeamsPanel({ match, names, data, lineupOf, calc, outlook, live, myTeamId }: {
   match: CalendarRow; names: Map<number, string>; data: LeagueData; lineupOf: (t: number) => Lineup | undefined;
-  calc: (t: number) => TeamLive | null; outlook?: Record<string, Outlook>; live?: LiveData;
+  calc: (t: number) => TeamLive | null; outlook?: Record<string, Outlook>; live?: LiveData; myTeamId: number | null;
 }) {
   const [side, setSide] = useState<"home" | "away">("home");
   const tid = side === "home" ? match.home_team_id : match.away_team_id;
@@ -149,8 +151,19 @@ function TeamsPanel({ match, names, data, lineupOf, calc, outlook, live }: {
   return (
     <div className="flex flex-col gap-3">
       <Tabs value={side} onChange={setSide} items={[{ value: "home", label: names.get(match.home_team_id) ?? "Casa" }, { value: "away", label: names.get(match.away_team_id) ?? "Trasferta" }]} />
-      {!lineup ? <Card><Empty>Formazione non inserita.</Empty></Card> : lineup.hidden || !t ? <Card><Empty>Formazione visibile dal primo calcio d'inizio.</Empty></Card> : (
+      {!lineup ? (
+        <Card>
+          <Empty>{names.get(tid)} non ha inserito la formazione: per questa partita non c'è un risultato.</Empty>
+          {myTeamId && (
+            <Link to={tid === myTeamId ? "/formazione" : `/formazione?squadra=${tid}`} className="block">
+              <Button variant="ghost" className="w-full">{tid === myTeamId ? "Inserisci la tua formazione" : `Inserisci tu la formazione di ${names.get(tid)}`}</Button>
+            </Link>
+          )}
+        </Card>
+      ) : lineup.hidden || !t ? <Card><Empty>Formazione visibile dal primo calcio d'inizio.</Empty></Card> : (
         <>
+          {lineup.entered_by && <p className="text-xs text-muted">Formazione inserita da {names.get(lineup.entered_by) ?? "un altro utente"}.{" "}
+            {myTeamId && <Link to={tid === myTeamId ? "/formazione" : `/formazione?squadra=${tid}`} className="underline">{tid === myTeamId ? "Sostituiscila con la tua" : "Correggila"}</Link>}</p>}
           {lineup.forced && <p className="text-xs text-danger">Formazione modificata a giornata iniziata ({new Date(lineup.created_at).toLocaleString("it-IT", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}).</p>}
           <Card title={`Titolari ${lineup.module.split("").join("-")}`} action={<span className="scoreboard tabular text-xl">{fmt(t.partial)}</span>}>
             <ul className="divide-y divide-line">{t.starters.map(row)}</ul>

@@ -1,7 +1,7 @@
 import { moduleShape, orderBench, ROLES, suggestLineup, validateLineup, type LeagueConfig, type ScoredPlayer } from "@footballlite/core";
 import { useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { Button, Card, Empty, ErrorBox, PlayerAvatar, RoleTag, Sheet, Spinner, StarterPercent, fmt } from "../components/ui";
 import { api, ApiError } from "../lib/api";
 import { useLeague, useLineups, useOutlook, useRound, type Lineup, type Outlook, type RosterPlayer } from "../lib/data";
@@ -16,19 +16,27 @@ export function LineupPage() {
   const round = useRound();
   const outlook = useOutlook();
   const lineups = useLineups(round.data?.matchday);
+  const [params] = useSearchParams();
 
   if (league.isLoading || round.isLoading || outlook.isLoading || lineups.isLoading) return <Spinner label="Carico la tua rosa…" />;
   if (league.error || round.error) return <ErrorBox error={league.error ?? round.error} />;
   if (!s?.myTeamId) return <Card title="Formazione"><Empty>Scegli il tuo utente nelle <Link to="/impostazioni" className="underline">impostazioni</Link>.</Empty></Card>;
-  const roster = rosterOf(league.data!, s.myTeamId);
-  if (!roster.length) return <Card title="Formazione"><Empty>La rosa della tua squadra non è ancora stata importata.</Empty></Card>;
+  const started = round.data!.phase !== "upcoming";
+  // Inserimento per conto di un altro utente: solo a giornata iniziata e se lui non ha inserito la sua.
+  const target = Number(params.get("squadra")) || s.myTeamId;
+  const proxyFor = target !== s.myTeamId ? league.data!.teams.find((t) => t.id === target) : undefined;
+  const current = lineups.data?.lineups.find((l) => l.team_id === target && !l.hidden);
+  if (proxyFor && (!started || (current && !current.entered_by))) {
+    return <Card title="Formazione"><Empty>{!started ? "Prima dell'inizio della giornata ognuno inserisce la propria formazione." : `${proxyFor.name} ha già inserito la sua formazione.`}</Empty></Card>;
+  }
+  const roster = rosterOf(league.data!, target);
+  if (!roster.length) return <Card title="Formazione"><Empty>La rosa di questo utente non è ancora stata importata.</Empty></Card>;
   const cfg = league.data!.league.config;
   const scored = scoredRoster(roster, outlook.data?.players, cfg);
-  const current = lineups.data?.lineups.find((l) => l.team_id === s.myTeamId && !l.hidden);
-  return <Editor key={current?.id ?? "new"} teamId={s.myTeamId} round={round.data!.matchday} started={round.data!.phase !== "upcoming"} scored={scored} cfg={cfg} current={current} />;
+  return <Editor key={`${target}-${current?.id ?? "new"}`} teamId={target} proxyName={proxyFor?.name} round={round.data!.matchday} started={started} scored={scored} cfg={cfg} current={current} />;
 }
 
-function Editor({ teamId, round, started, scored, cfg, current }: { teamId: number; round: number; started: boolean; scored: Row[]; cfg: LeagueConfig; current?: Lineup }) {
+function Editor({ teamId, proxyName, round, started, scored, cfg, current }: { teamId: number; proxyName?: string; round: number; started: boolean; scored: Row[]; cfg: LeagueConfig; current?: Lineup }) {
   const qc = useQueryClient();
   const byId = useMemo(() => new Map(scored.map((p) => [p.id, p])), [scored]);
   const initial = useMemo(() => {
@@ -99,10 +107,10 @@ function Editor({ teamId, round, started, scored, cfg, current }: { teamId: numb
     setSaving(true);
     setMessage(null);
     try {
-      await api(`/league/lineups/${round}/${teamId}`, { method: "PUT", body: { module, starters: starters.map(Number), bench: bench.map(Number), forced } });
+      await api(`/league/lineups/${round}/${teamId}`, { method: "PUT", body: { module, starters: starters.map(Number), bench: bench.map(Number), forced: forced || !!proxyName } });
       await qc.invalidateQueries({ queryKey: ["lineups"] });
       setConfirmForce(false);
-      setMessage({ ok: true, text: forced ? "Formazione modificata a giornata iniziata: la modifica è visibile a tutta la lega." : "Formazione salvata." });
+      setMessage({ ok: true, text: proxyName ? `Formazione di ${proxyName} inserita: risulterà inserita da te.` : forced ? "Formazione modificata a giornata iniziata: la modifica è visibile a tutta la lega." : "Formazione salvata." });
     } catch (e) {
       if (e instanceof ApiError && e.body?.needsForce) setConfirmForce(true);
       else setMessage({ ok: false, text: (e as Error).message });
@@ -120,13 +128,17 @@ function Editor({ teamId, round, started, scored, cfg, current }: { teamId: numb
     <div className="flex flex-col gap-4">
       <div className="flex items-end justify-between gap-3">
         <div>
-          <h1 className="scoreboard text-3xl leading-none">La tua formazione</h1>
+          <h1 className="scoreboard text-3xl leading-none">{proxyName ? `Formazione di ${proxyName}` : "La tua formazione"}</h1>
           <p className="mt-1 text-xs text-muted">Giornata {round} · punteggio atteso {fmt(expected)}</p>
         </div>
         <Button variant="ghost" onClick={applySuggestion}>Consigliata</Button>
       </div>
 
-      {started && (
+      {proxyName ? (
+        <div className="rounded-xl border border-card bg-card/20 p-3 text-sm">
+          {proxyName} non ha inserito la formazione. Puoi inserirla tu per vedere il risultato della sua partita: risulterà «inserita da» te e {proxyName} potrà sempre sostituirla.
+        </div>
+      ) : started && (
         <div className="rounded-xl border border-danger/40 bg-danger/10 p-3 text-sm">
           La giornata è iniziata: puoi ancora cambiare la formazione, ma la modifica sarà segnalata a tutta la lega.
         </div>
@@ -170,8 +182,8 @@ function Editor({ teamId, round, started, scored, cfg, current }: { teamId: numb
       </Card>
 
       <div className="sticky bottom-4 z-20">
-        <Button variant={started ? "danger" : "card"} className="w-full py-3 text-base" disabled={saving || errors.length > 0} onClick={() => save(false)}>
-          {saving ? "Salvataggio…" : started ? "Salva modifica forzata" : "Salva formazione"}
+        <Button variant={started && !proxyName ? "danger" : "card"} className="w-full py-3 text-base" disabled={saving || errors.length > 0} onClick={() => save(false)}>
+          {saving ? "Salvataggio…" : proxyName ? `Inserisci per ${proxyName}` : started ? "Salva modifica forzata" : "Salva formazione"}
         </Button>
       </div>
 

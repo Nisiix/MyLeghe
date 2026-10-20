@@ -224,7 +224,7 @@ league.get("/league/admin/players", async (c) => {
 
 // ---- Formazioni ------------------------------------------------------------------------------
 
-interface LineupRow { id: number; team_id: number; round: number; module: string; starters: string; bench: string; forced: number; created_at: number }
+interface LineupRow { id: number; team_id: number; round: number; module: string; starters: string; bench: string; forced: number; created_at: number; entered_by: number | null }
 
 const parseLineup = (r: LineupRow) => ({ ...r, starters: JSON.parse(r.starters) as number[], bench: JSON.parse(r.bench) as number[], forced: !!r.forced });
 
@@ -256,19 +256,33 @@ league.get("/league/lineups/:round/history/:teamId", async (c) => {
 /**
  * Salva la formazione della propria squadra. Dopo il primo calcio d'inizio serve `forced: true`
  * (se la lega lo consente): la versione resta nello storico ed è segnata come modificata a giornata iniziata.
+ * A giornata iniziata un utente può inserire la formazione di chi non l'ha inserita (segnata "inserita da"):
+ * può correggere le formazioni inserite così, ma mai sovrascrivere quella messa dal proprietario.
  */
 league.put("/league/lineups/:round/:teamId", async (c) => {
   const s = c.get("session");
   const teamId = Number(c.req.param("teamId"));
   const round = Number(c.req.param("round"));
-  if (!s.tids.includes(teamId)) return c.json({ error: "Puoi schierare solo la formazione dell'utente che hai scelto." }, 403);
   const body = await c.req.json<{ module: string; starters: number[]; bench: number[]; forced?: boolean }>();
   const cfg = await loadConfig(c.env.DB, s.lid);
   const info = await activeRound(c.env);
   if (round !== info.matchday) return c.json({ error: `Si può schierare solo la giornata ${info.matchday}.` }, 400);
   const started = info.phase !== "upcoming";
+  const team = await c.env.DB.prepare("SELECT 1 FROM teams WHERE id = ? AND league_id = ?").bind(teamId, s.lid).first();
+  if (!team) return c.json({ error: "Utente non trovato" }, 404);
+  let enteredBy: number | null = null;
+  if (!s.tids.includes(teamId)) {
+    const me = s.tids[0];
+    if (!me) return c.json({ error: "Scegli prima il tuo utente." }, 403);
+    if (!started) return c.json({ error: "Prima dell'inizio della giornata ognuno inserisce la propria formazione." }, 403);
+    const last = await c.env.DB.prepare("SELECT entered_by FROM lineups WHERE team_id = ? AND round = ? ORDER BY id DESC LIMIT 1").bind(teamId, round).first<{ entered_by: number | null }>();
+    if (last && last.entered_by === null) return c.json({ error: "Questo utente ha già inserito la sua formazione." }, 403);
+    enteredBy = me;
+    body.forced = true;
+  }
   if (started && !body.forced) return c.json({ error: "La giornata è iniziata: conferma la modifica forzata.", needsForce: true }, 409);
-  if (started && !cfg.allowForcedEdit) return c.json({ error: "La lega non consente modifiche a giornata iniziata." }, 403);
+  // La regola dell'admin riguarda la modifica della propria formazione, non l'inserimento per chi non l'ha fatto.
+  if (started && !cfg.allowForcedEdit && enteredBy === null) return c.json({ error: "La lega non consente modifiche a giornata iniziata." }, 403);
 
   const roster = await c.env.DB.prepare("SELECT slot, role FROM roster WHERE team_id = ?").bind(teamId).all<{ slot: number; role: Role }>();
   const roles = new Map((roster.results ?? []).map((r) => [r.slot, r.role]));
@@ -277,9 +291,9 @@ league.put("/league/lineups/:round/:teamId", async (c) => {
   const errors = validateLineup(body.starters.map((x) => ({ role: roles.get(x)! })), body.bench, body.module, cfg);
   if (errors.length) return c.json({ error: errors.join(". ") }, 400);
 
-  await c.env.DB.prepare("INSERT INTO lineups (league_id, team_id, round, module, starters, bench, forced, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)")
-    .bind(s.lid, teamId, round, body.module, JSON.stringify(body.starters), JSON.stringify(body.bench), started ? 1 : 0, Date.now()).run();
-  return c.json({ ok: true, forced: started });
+  await c.env.DB.prepare("INSERT INTO lineups (league_id, team_id, round, module, starters, bench, forced, created_at, entered_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)")
+    .bind(s.lid, teamId, round, body.module, JSON.stringify(body.starters), JSON.stringify(body.bench), started ? 1 : 0, Date.now(), enteredBy).run();
+  return c.json({ ok: true, forced: started, enteredBy });
 });
 
 // ---- Calendario della lega (importato dal file di LegheFC) ------------------------------------------
