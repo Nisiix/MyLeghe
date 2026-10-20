@@ -7,7 +7,12 @@
 #   BUBBLEWRAP_KEY_PASSWORD        password della chiave "footballlite"
 # Serve la stessa chiave dell'APK già distribuito: con una chiave diversa Android non aggiorna l'app installata
 # e l'impronta in web/public/.well-known/assetlinks.json non corrisponde.
-# Senza i secret l'APK viene comunque compilato con una chiave temporanea (artefatto del workflow) ma non pubblicato.
+#
+# Senza ANDROID_KEYSTORE_BASE64 ma con le due password: il workflow genera una volta una chiave propria
+# (android/signing/footballlite-ci.keystore, protetta dalle password, salvata nel repository e riusata a ogni build),
+# pubblica l'APK e aggiunge la sua impronta ad assetlinks.json (poi avvia il deploy del Worker). Chi aveva l'APK
+# firmato con la chiave precedente deve disinstallarlo una volta prima di installare il nuovo.
+# Senza alcun secret l'APK viene compilato con una chiave temporanea (artefatto del workflow) ma non pubblicato.
 name: APK Android
 
 on:
@@ -25,6 +30,7 @@ permissions:
   contents: write
   pages: write
   id-token: write
+  actions: write
 
 concurrency:
   group: apk
@@ -75,9 +81,22 @@ jobs:
         id: key
         run: |
           mkdir -p apk/signing
+          CI_KS=android/signing/footballlite-ci.keystore
           if [ -n "$KEYSTORE_B64" ] && [ -n "$BUBBLEWRAP_KEYSTORE_PASSWORD" ] && [ -n "$BUBBLEWRAP_KEY_PASSWORD" ]; then
             echo "$KEYSTORE_B64" | base64 -d > apk/signing/footballlite.keystore
             echo "real=true" >> "$GITHUB_OUTPUT"
+          elif [ -n "$BUBBLEWRAP_KEYSTORE_PASSWORD" ] && [ -n "$BUBBLEWRAP_KEY_PASSWORD" ]; then
+            # Chiave del workflow: generata una volta, protetta dalle password dei secret, salvata nel repository.
+            if [ ! -f "$CI_KS" ]; then
+              mkdir -p android/signing
+              keytool -genkeypair -storetype JKS -keystore "$CI_KS" -alias footballlite -keyalg RSA -keysize 2048 -validity 10000 \
+                -storepass "$BUBBLEWRAP_KEYSTORE_PASSWORD" -keypass "$BUBBLEWRAP_KEY_PASSWORD" -dname "CN=FootballLite, O=FootballLite" > /dev/null 2>&1
+              echo "newkey=true" >> "$GITHUB_OUTPUT"
+              echo "Generata la chiave di firma del workflow: $CI_KS"
+            fi
+            cp "$CI_KS" apk/signing/footballlite.keystore
+            echo "real=true" >> "$GITHUB_OUTPUT"
+            echo "ci=true" >> "$GITHUB_OUTPUT"
           else
             echo "::warning::Secret della chiave di firma assenti: APK firmato con una chiave temporanea, NON pubblicato sulla landing."
             P=$(openssl rand -hex 16)
@@ -90,13 +109,15 @@ jobs:
           fi
 
       - name: Progetto Android e compilazione
+        id: build
         working-directory: android
         run: |
           bubblewrap update --skipVersionUpgrade --manifest=./twa-manifest.json
           bubblewrap build --skipPwaValidation --manifest=./twa-manifest.json
           ls -la *.apk
-          echo "Impronta SHA-256 della chiave usata:"
-          keytool -list -v -keystore ../apk/signing/footballlite.keystore -alias footballlite -storepass "$BUBBLEWRAP_KEYSTORE_PASSWORD" | grep "SHA256:"
+          FP=$(keytool -list -v -keystore ../apk/signing/footballlite.keystore -alias footballlite -storepass "$BUBBLEWRAP_KEYSTORE_PASSWORD" | grep "SHA256:" | sed 's/.*SHA256: *//')
+          echo "Impronta SHA-256 della chiave usata: $FP"
+          echo "fingerprint=$FP" >> "$GITHUB_OUTPUT"
 
       - uses: actions/upload-artifact@v4
         with:
@@ -106,15 +127,28 @@ jobs:
       - name: Pubblicazione sulla landing
         id: publish
         if: steps.key.outputs.real == 'true' && github.ref == 'refs/heads/main'
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           cp android/app-release-signed.apk site/download/FootballLite.apk
           git config user.name "github-actions[bot]"
           git config user.email "41898333+github-actions[bot]@users.noreply.github.com"
           git add site/download/FootballLite.apk
+          # Chiave del workflow: si salva nel repository e la sua impronta entra in assetlinks.json (per la TWA a schermo intero).
+          LINKS=web/public/.well-known/assetlinks.json
+          FP="${{ steps.build.outputs.fingerprint }}"
+          [ "${{ steps.key.outputs.ci }}" = "true" ] && git add -f android/signing/footballlite-ci.keystore
+          if [ -n "$FP" ] && ! grep -q "$FP" "$LINKS"; then
+            jq --arg fp "$FP" '.[0].target.sha256_cert_fingerprints += [$fp]' "$LINKS" > links.tmp && mv links.tmp "$LINKS"
+            git add "$LINKS"
+            echo "links_changed=true" >> "$GITHUB_OUTPUT"
+          fi
           git commit -m "APK Android $(jq -r .appVersionName android/twa-manifest.json) compilato da GitHub Actions"
           git pull --rebase origin main
           git push origin HEAD:main
           echo "published=true" >> "$GITHUB_OUTPUT"
+          # Il commit del bot non avvia i workflow sul push: il deploy del Worker (nuova impronta) si avvia a mano.
+          if grep -q "links_changed=true" "$GITHUB_OUTPUT"; then gh workflow run deploy.yml --ref main; fi
 
       - name: Esito
         if: steps.key.outputs.real != 'true'

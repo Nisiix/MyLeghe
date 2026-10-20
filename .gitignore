@@ -32,3 +32,7 @@ video/.hyperframes/
 android/*
 !android/twa-manifest.json
 !android/README.md
+# Chiave di firma generata dal workflow APK (protetta dalla password nei secret del repository)
+!android/signing/
+android/signing/*
+!android/signing/footballlite-ci.keystore
