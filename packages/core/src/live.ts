@@ -2,6 +2,7 @@
 // I voti sono stime FootballLite calcolate su statistiche con licenza: non sono i voti ufficiali.
 
 import { bandValue, matchGoals, type LeagueConfig, type Role } from "./config";
+import { MIN_MINUTES_FOR_VOTE, statVote, type PlayerStats } from "./vote";
 
 export interface MatchEvents {
   minutes: number;
@@ -17,6 +18,8 @@ export interface MatchEvents {
   goalsConceded: number;
   /** Rating della fonte, se esiste. */
   rating?: number | null;
+  /** Statistiche complete della partita (per il voto statistico). */
+  stats?: PlayerStats | null;
 }
 
 export type MatchState = "pending" | "live" | "finished";
@@ -52,8 +55,23 @@ export function fantavote(e: MatchEvents, role: Role, cfg: LeagueConfig, finishe
     e.penaltyScored * b.penaltyScored[i] + e.penaltyMissed * b.penaltyMissed[i] +
     e.penaltySaved * b.penaltySaved[i] + e.ownGoals * b.ownGoal[i] + e.goalsConceded * b.goalConceded[i];
   if (finished && e.goalsConceded === 0 && e.minutes > 0) bonus += b.cleanSheet[i];
-  const vote = cfg.voteFromRating && e.rating ? ratingToVote(e.rating) : cfg.baseVote;
+  const vote = estimateVote(e, role, cfg) ?? cfg.baseVote;
   return { vote, bonus: round2(bonus), fantavote: round2(vote + bonus) };
+}
+
+/** Voto stimato secondo il modello scelto dalla lega; se mancano i dati si passa al successivo (statistico → rating → base). */
+export function estimateVote(e: MatchEvents, role: Role, cfg: LeagueConfig): number | null {
+  if (cfg.voteModel === "base") return cfg.baseVote;
+  if (cfg.voteModel === "stats" && e.stats) {
+    const v = statVote({ ...e.stats, minutes_played: e.minutes }, role);
+    if (v) return v.vote;
+  }
+  return e.rating ? ratingToVote(e.rating) : null;
+}
+
+/** Ha avuto eventi da bonus/malus (in quel caso prende voto anche con pochi minuti). */
+function hasEvents(e: MatchEvents): boolean {
+  return e.goals + e.assists + e.yellow + e.red + e.penaltyScored + e.penaltyMissed + e.penaltySaved + e.ownGoals > 0;
 }
 
 /**
@@ -62,7 +80,9 @@ export function fantavote(e: MatchEvents, role: Role, cfg: LeagueConfig, finishe
  */
 export function playerLiveScore(id: string, role: Role, events: MatchEvents | undefined, state: MatchState, cfg: LeagueConfig): PlayerLiveScore {
   const base = { id, role, yellow: events?.yellow ?? 0, red: events?.red ?? 0, goals: (events?.goals ?? 0) + (events?.penaltyScored ?? 0), assists: events?.assists ?? 0 };
-  if (events && events.minutes > 0) {
+  // Pochi minuti senza eventi: senza voto (s.v.), come nel fantacalcio, quando la sua partita è finita.
+  const tooShort = events && events.minutes > 0 && events.minutes < MIN_MINUTES_FOR_VOTE && !hasEvents(events) && role !== 1;
+  if (events && events.minutes > 0 && !(tooShort && state === "finished")) {
     const f = fantavote(events, role, cfg, state === "finished");
     return { ...base, state: "played", vote: f.vote, bonus: f.bonus, fantavote: f.fantavote };
   }

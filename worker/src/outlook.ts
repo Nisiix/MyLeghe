@@ -1,6 +1,6 @@
 // Dati aggregati per l'app: giornata attiva, titolarità stimata e dati live dei giocatori delle rose.
 
-import { fantavote, starterProbability, type LeagueConfig, type MatchEvents, type Role } from "@footballlite/core";
+import { fantavote, starterProbability, type LeagueConfig, type MatchEvents, type PlayerStats, type Role } from "@footballlite/core";
 import { Hono } from "hono";
 import { requireSession, type AppEnv } from "./auth";
 import type { Env } from "./env";
@@ -27,15 +27,16 @@ outlook.get("/league/round", async (c) => {
   return c.json({ ...info, now: Date.now() });
 });
 
-interface PmRow extends Record<string, number | null> {
+interface PmRow extends Record<string, number | string | null> {
   player_id: number; matchday: number; started: number; minutes: number; goals: number; assists: number; yellow: number; red: number;
-  pen_scored: number; pen_missed: number; pen_saved: number; own_goals: number; conceded: number; rating: number | null;
+  pen_scored: number; pen_missed: number; pen_saved: number; own_goals: number; conceded: number; rating: number | null; stats: string | null;
 }
 
 const toEvents = (r: PmRow): MatchEvents => ({
   minutes: r.minutes, goals: r.goals, assists: r.assists, yellow: r.yellow, red: r.red,
   penaltyScored: r.pen_scored, penaltyMissed: r.pen_missed, penaltySaved: r.pen_saved,
   ownGoals: r.own_goals, goalsConceded: r.conceded, rating: r.rating,
+  stats: typeof r.stats === "string" ? (JSON.parse(r.stats) as PlayerStats) : null,
 });
 
 export interface PlayerOutlookOut {

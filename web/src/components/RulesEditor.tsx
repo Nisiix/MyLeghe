@@ -230,9 +230,16 @@ export function RulesEditor({ config }: { config: LeagueConfig }) {
           {c.noLineup.mode === "fixed" && <Num label="Punteggio assegnato" value={c.noLineup.points} onChange={(v) => setC({ ...c, noLineup: { ...c.noLineup, points: v } })} />}
         </Section>
 
-        <Section title="Voti stimati" note="I voti ufficiali non sono disponibili: FootballLite li stima dal rating delle statistiche BSD, oppure assegna il voto base a chi gioca.">
-          <Check label="Stima il voto dal rating della fonte dati" checked={c.voteFromRating} onChange={(v) => setC({ ...c, voteFromRating: v })} />
-          <Num label="Voto base (se non si usa il rating)" value={c.baseVote} onChange={(v) => setC({ ...c, baseVote: v })} />
+        <Section title="Voti stimati" note="I voti ufficiali non sono disponibili. Il voto statistico FootballLite è un modello indipendente (non Alvin482): pesa attacco, costruzione, difesa, portiere ed errori dalle statistiche BSD di ogni giocatore; sotto i 20 minuti senza eventi il giocatore è senza voto.">
+          <label className="flex items-center justify-between gap-3">
+            <span>Come stimare il voto</span>
+            <select className="rounded-lg border border-line bg-surface px-2 py-1" value={c.voteModel} onChange={(e) => setC({ ...c, voteModel: e.target.value as LeagueConfig["voteModel"] })}>
+              <option value="stats">Voto statistico FootballLite</option>
+              <option value="rating">Rating della fonte dati</option>
+              <option value="base">Voto base a tutti</option>
+            </select>
+          </label>
+          <Num label="Voto base (se mancano i dati)" value={c.baseVote} onChange={(v) => setC({ ...c, baseVote: v })} />
         </Section>
 
         <Button onClick={save}>Salva regolamento</Button>

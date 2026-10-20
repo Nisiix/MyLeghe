@@ -147,17 +147,17 @@ export async function syncMatchStats(env: Env, m: SaMatch, budget: Budget): Prom
   const stmts = stats.player_stats.map((p) => {
     const pg = penGoals.get(p.player_id) ?? 0;
     return env.DB.prepare(
-      `INSERT INTO player_match (event_id, player_id, matchday, started, minutes, goals, assists, yellow, red, pen_scored, pen_missed, pen_saved, own_goals, conceded, rating, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `INSERT INTO player_match (event_id, player_id, matchday, started, minutes, goals, assists, yellow, red, pen_scored, pen_missed, pen_saved, own_goals, conceded, rating, stats, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT(event_id, player_id) DO UPDATE SET started = excluded.started, minutes = excluded.minutes, goals = excluded.goals,
          assists = excluded.assists, yellow = excluded.yellow, red = excluded.red, pen_scored = excluded.pen_scored,
          pen_missed = excluded.pen_missed, pen_saved = excluded.pen_saved, own_goals = excluded.own_goals,
-         conceded = excluded.conceded, rating = excluded.rating, updated_at = excluded.updated_at`,
+         conceded = excluded.conceded, rating = excluded.rating, stats = excluded.stats, updated_at = excluded.updated_at`,
     ).bind(
       m.ext_event_id, p.player_id, m.matchday, startedSet.has(p.player_id) ? 1 : 0, p.minutes_played ?? 0,
       Math.max(0, (p.goals ?? 0) - pg), p.goal_assist ?? 0, p.yellow_card ?? 0, p.red_card ?? 0, pg,
       penMissed.get(p.player_id) ?? 0, penSaved.get(p.player_id) ?? 0, ownGoals.get(p.player_id) ?? 0,
-      p.goals_conceded ?? 0, p.rating ?? null, now,
+      p.goals_conceded ?? 0, p.rating ?? null, JSON.stringify(pickStats(p)), now,
     );
   });
   if (stmts.length) await env.DB.batch(stmts);
@@ -227,4 +227,18 @@ export async function runSync(env: Env): Promise<{ used: number; skipped?: strin
     }
   }
   return { used: (await quotaUsed(env)) - before };
+}
+
+/** Statistiche usate dal voto statistico (solo valori numerici non nulli, per contenere lo spazio). */
+const STAT_KEYS = [
+  "goals", "goal_assist", "expected_goals", "expected_assists", "total_shots", "shots_on_target", "key_pass", "total_pass",
+  "accurate_pass", "total_contest", "won_contest", "duel_won", "duel_lost", "won_tackle", "total_clearance", "interception",
+  "ball_recovery", "blocked_scoring_attempt", "dispossessed", "fouls", "yellow_card", "red_card", "saves", "goals_conceded",
+  "goals_prevented", "good_high_claim", "accurate_keeper_sweeper", "big_chance_created", "big_chance_missed", "last_man_tackle",
+  "clearance_off_line", "error_lead_to_a_goal", "error_lead_to_a_shot", "progressive_ball_carries_count",
+];
+function pickStats(p: Record<string, unknown>): Record<string, number> {
+  const out: Record<string, number> = {};
+  for (const k of STAT_KEYS) if (typeof p[k] === "number" && p[k] !== 0) out[k] = p[k] as number;
+  return out;
 }

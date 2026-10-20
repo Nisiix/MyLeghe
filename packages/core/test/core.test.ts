@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   DEFAULT_CONFIG, dueReminder, goalsFromPoints, matchPlayer, normalizeConfig, parseCsv, parseRosterGrid,
-  parseCalendarGrid, playerLiveScore, computeTeam, computeMatch, matchGoals, noLineupScore, scorePlayers, starterDrops, starterProbability, suggestLineup, validateLineup,
+  parseCalendarGrid, playerLiveScore, computeTeam, statVote, computeMatch, matchGoals, noLineupScore, scorePlayers, starterDrops, starterProbability, suggestLineup, validateLineup,
   type Cell, type RosterEntry,
 } from "../src";
 
@@ -226,5 +226,23 @@ describe("import calendario", () => {
     expect(r.days[0].matches[0]).toEqual({ home: "Alfa", away: "Beta", homePoints: 75, awayPoints: 87.5, homeGoals: 2, awayGoals: 5 });
     expect(r.days[1].matches[0].homeGoals).toBeNull();
     expect(r.teams.sort()).toEqual(["Alfa", "Beta", "Delta", "Gamma"]);
+  });
+});
+
+describe("voto statistico FootballLite", () => {
+  it("premia una buona partita e penalizza gli errori, per ruolo", () => {
+    const good = statVote({ minutes_played: 90, goals: 1, expected_goals: 0.8, shots_on_target: 3, key_pass: 2, total_pass: 30, accurate_pass: 26 }, 4)!;
+    const bad = statVote({ minutes_played: 90, error_lead_to_a_goal: 1, dispossessed: 5, total_pass: 30, accurate_pass: 18 }, 3)!;
+    const keeper = statVote({ minutes_played: 90, saves: 6, goals_prevented: 1.2, goals_conceded: 1 }, 1)!;
+    expect(good.vote).toBeGreaterThan(6.5);
+    expect(bad.vote).toBeLessThan(6);
+    expect(keeper.vote).toBeGreaterThanOrEqual(6.5);
+    expect(statVote({ minutes_played: 0 }, 2)).toBeNull();
+  });
+
+  it("lascia senza voto chi gioca pochi minuti senza eventi", () => {
+    const ev = { minutes: 10, goals: 0, assists: 0, yellow: 0, red: 0, penaltyScored: 0, penaltyMissed: 0, penaltySaved: 0, ownGoals: 0, goalsConceded: 0, stats: {} };
+    expect(playerLiveScore("x", 3, ev, "finished", cfg).state).toBe("absent");
+    expect(playerLiveScore("x", 3, { ...ev, goals: 1 }, "finished", cfg).state).toBe("played");
   });
 });

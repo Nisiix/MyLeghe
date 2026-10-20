@@ -85,10 +85,13 @@ export interface LeagueConfig {
     ownGoalBelow: number;
   };
   bonus: BonusTable;
-  /** Voto ipotizzato per chi deve ancora giocare, o per tutti se non si usa il rating della fonte. */
+  /** Voto per chi gioca quando il modello scelto non ha dati (e per tutti con voteModel "base"). */
   baseVote: number;
-  /** Stima del voto dal rating della fonte dati (riportato sulla scala dei voti del fantacalcio). */
-  voteFromRating: boolean;
+  /**
+   * Come si stima il voto: "stats" = voto statistico FootballLite (statistiche per giocatore),
+   * "rating" = rating della fonte riportato sulla scala del fantacalcio, "base" = voto base a tutti.
+   */
+  voteModel: "stats" | "rating" | "base";
   substitutions: {
     max: number;
     /** "role": panchinaro dello stesso ruolo; "free": anche altro ruolo se il modulo risultante è ammesso. */
@@ -124,7 +127,7 @@ export const DEFAULT_CONFIG: LeagueConfig = {
     assistSoft: all(0.5), assistGold: all(1.5), decisiveGoalWin: all(0), decisiveGoalDraw: all(0), playerOfTheMatch: all(0),
   },
   baseVote: 6,
-  voteFromRating: true,
+  voteModel: "stats",
   substitutions: { max: 5, mode: "role", officeVoteGoalkeeper: null, officeVoteField: null },
   modifiers: {
     defense: {
@@ -188,7 +191,8 @@ export function normalizeConfig(raw: unknown): LeagueConfig {
     },
     bonus,
     baseVote: num(r.baseVote, d.baseVote),
-    voteFromRating: bool(r.voteFromRating, d.voteFromRating),
+    // Compatibilità: la prima versione aveva solo voteFromRating.
+    voteModel: r.voteModel === "rating" || r.voteModel === "base" || r.voteModel === "stats" ? r.voteModel : r.voteFromRating === false ? "base" : d.voteModel,
     substitutions: {
       // Compatibilità con la prima versione del regolamento (maxSubstitutions).
       max: Math.max(0, Math.round(num(sub.max ?? r.maxSubstitutions, d.substitutions.max))),
