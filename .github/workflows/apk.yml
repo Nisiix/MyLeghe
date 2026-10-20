@@ -1,0 +1,142 @@
+# Compila, firma e pubblica sulla landing l'APK Android (Trusted Web Activity generata con Bubblewrap).
+# Parte da solo quando cambiano la configurazione Android, le icone o il manifest dell'app, oppure a mano (Run workflow).
+#
+# Una tantum, in Settings → Secrets and variables → Actions → Secrets:
+#   ANDROID_KEYSTORE_BASE64        la chiave di firma (apk/signing/footballlite.keystore) in base64:  base64 -w0 footballlite.keystore
+#   BUBBLEWRAP_KEYSTORE_PASSWORD   password del keystore
+#   BUBBLEWRAP_KEY_PASSWORD        password della chiave "footballlite"
+# Serve la stessa chiave dell'APK già distribuito: con una chiave diversa Android non aggiorna l'app installata
+# e l'impronta in web/public/.well-known/assetlinks.json non corrisponde.
+# Senza i secret l'APK viene comunque compilato con una chiave temporanea (artefatto del workflow) ma non pubblicato.
+name: APK Android
+
+on:
+  push:
+    branches: [main, ccr-cfdc2e03-uvbq5c]
+    paths:
+      - "android/twa-manifest.json"
+      - "web/public/icon*"
+      - "web/public/apple-touch-icon.png"
+      - "web/vite.config.ts"
+      - ".github/workflows/apk.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+concurrency:
+  group: apk
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    env:
+      KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+      BUBBLEWRAP_KEYSTORE_PASSWORD: ${{ secrets.BUBBLEWRAP_KEYSTORE_PASSWORD }}
+      BUBBLEWRAP_KEY_PASSWORD: ${{ secrets.BUBBLEWRAP_KEY_PASSWORD }}
+    outputs:
+      published: ${{ steps.publish.outputs.published }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Strumenti Android (build-tools e piattaforma) e configurazione di Bubblewrap
+        run: |
+          SDKM="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          yes | "$SDKM" --licenses > /dev/null
+          "$SDKM" "build-tools;36.1.0" "platforms;android-36" > /dev/null
+          mkdir -p ~/.bubblewrap
+          echo "{\"jdkPath\":\"$JAVA_HOME\",\"androidSdkPath\":\"$ANDROID_HOME\"}" > ~/.bubblewrap/config.json
+          npm install -g @bubblewrap/cli@1.27.0
+
+      - name: Versione e icone del commit
+        working-directory: android
+        run: |
+          # versionCode sempre crescente (1 è l'APK compilato a mano); icone prese da questo commit, non dal sito pubblicato.
+          RAW="https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/${GITHUB_SHA}/web/public"
+          jq --argjson code $((GITHUB_RUN_NUMBER + 1)) --arg name "1.0.$((GITHUB_RUN_NUMBER + 1))" \
+             --arg icon "$RAW/icon-512.png" --arg mask "$RAW/icon-maskable-512.png" \
+             '.appVersionCode = $code | .appVersionName = $name | .iconUrl = $icon | .maskableIconUrl = $mask' \
+             twa-manifest.json > t.json && mv t.json twa-manifest.json
+          jq '{appVersionCode, appVersionName, iconUrl, maskableIconUrl, host}' twa-manifest.json
+
+      - name: Chiave di firma
+        id: key
+        run: |
+          mkdir -p apk/signing
+          if [ -n "$KEYSTORE_B64" ] && [ -n "$BUBBLEWRAP_KEYSTORE_PASSWORD" ] && [ -n "$BUBBLEWRAP_KEY_PASSWORD" ]; then
+            echo "$KEYSTORE_B64" | base64 -d > apk/signing/footballlite.keystore
+            echo "real=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::warning::Secret della chiave di firma assenti: APK firmato con una chiave temporanea, NON pubblicato sulla landing."
+            P=$(openssl rand -hex 16)
+            keytool -genkeypair -keystore apk/signing/footballlite.keystore -alias footballlite -keyalg RSA -keysize 2048 -validity 30 \
+              -storepass "$P" -keypass "$P" -dname "CN=FootballLite test" > /dev/null 2>&1
+            echo "BUBBLEWRAP_KEYSTORE_PASSWORD=$P" >> "$GITHUB_ENV"
+            echo "BUBBLEWRAP_KEY_PASSWORD=$P" >> "$GITHUB_ENV"
+            echo "real=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Progetto Android e compilazione
+        working-directory: android
+        run: |
+          bubblewrap update --skipVersionUpgrade --manifest=./twa-manifest.json
+          bubblewrap build --skipPwaValidation --manifest=./twa-manifest.json
+          ls -la *.apk
+          echo "Impronta SHA-256 della chiave usata:"
+          keytool -list -v -keystore ../apk/signing/footballlite.keystore -alias footballlite -storepass "$BUBBLEWRAP_KEYSTORE_PASSWORD" | grep "SHA256:"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: FootballLite-apk
+          path: android/app-release-signed.apk
+
+      - name: Pubblicazione sulla landing
+        id: publish
+        if: steps.key.outputs.real == 'true' && github.ref == 'refs/heads/main'
+        run: |
+          cp android/app-release-signed.apk site/download/FootballLite.apk
+          git config user.name "github-actions[bot]"
+          git config user.email "41898333+github-actions[bot]@users.noreply.github.com"
+          git add site/download/FootballLite.apk
+          git commit -m "APK Android $(jq -r .appVersionName android/twa-manifest.json) compilato da GitHub Actions"
+          git pull --rebase origin main
+          git push origin HEAD:main
+          echo "published=true" >> "$GITHUB_OUTPUT"
+
+      - name: Esito
+        if: steps.key.outputs.real != 'true'
+        run: |
+          echo "::error::APK compilato ma non pubblicato: aggiungi i secret ANDROID_KEYSTORE_BASE64, BUBBLEWRAP_KEYSTORE_PASSWORD e BUBBLEWRAP_KEY_PASSWORD (vedi l'intestazione di .github/workflows/apk.yml)."
+          exit 1
+
+  # Il commit dell'APK fatto dal workflow non avvia altri workflow: la landing si ripubblica qui.
+  pages:
+    needs: build
+    if: needs.build.outputs.published == 'true'
+    runs-on: ubuntu-latest
+    concurrency:
+      group: pages
+      cancel-in-progress: false
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+      - id: deployment
+        uses: actions/deploy-pages@v4
