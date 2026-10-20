@@ -68,6 +68,8 @@ export interface SuggestedLineup {
   starters: ScoredPlayer[];
   bench: ScoredPlayer[];
   total: number;
+  captain: string | null;
+  vice: string | null;
 }
 
 /** Sceglie tra i moduli della lega quello con il punteggio atteso più alto. */
@@ -83,33 +85,60 @@ export function suggestLineup(scored: ScoredPlayer[], cfg: LeagueConfig): Sugges
     if (def.length < d || mid.length < c || att.length < a) continue;
     const starters = [gk[0], ...def.slice(0, d), ...mid.slice(0, c), ...att.slice(0, a)];
     const total = round2(starters.reduce((s, p) => s + p.score, 0));
-    if (!best || total > best.total) best = { module: mod, starters, bench: [], total };
+    if (!best || total > best.total) best = { module: mod, starters, bench: [], total, captain: null, vice: null };
   }
   if (!best) return null;
+  const byScore = [...best.starters].sort((a, b) => b.score - a.score);
+  best.captain = byScore[0]?.id ?? null;
+  best.vice = byScore[1]?.id ?? null;
   const used = new Set(best.starters.map((p) => p.id));
-  best.bench = orderBench(scored.filter((p) => !used.has(p.id)), cfg.benchCount);
+  best.bench = orderBench(scored.filter((p) => !used.has(p.id)), cfg.benchCount, cfg.benchPerRole);
   return best;
 }
 
-/** Panchina in ordine di ruolo (P, D, C, A), i migliori per primi. */
-export function orderBench(rest: ScoredPlayer[], count: number): ScoredPlayer[] {
-  return ROLES.flatMap((r) => rest.filter((p) => p.role === r).sort((a, b) => b.score - a.score)).slice(0, count);
+/** Panchina in ordine di ruolo (P, D, C, A), i migliori per primi; rispetta i panchinari per ruolo se la lega li fissa. */
+export function orderBench(rest: ScoredPlayer[], count: number, perRole: LeagueConfig["benchPerRole"] = null): ScoredPlayer[] {
+  return ROLES.flatMap((r) => {
+    const list = rest.filter((p) => p.role === r).sort((a, b) => b.score - a.score);
+    return perRole ? list.slice(0, perRole[r - 1]) : list;
+  }).slice(0, count);
 }
 
-export function validateLineup(starters: { role: Role }[], bench: unknown[], module: string, cfg: LeagueConfig): string[] {
+export interface LineupCheck {
+  starters: { role: Role }[];
+  bench: { role: Role }[];
+  module: string;
+  captain?: string | null;
+  vice?: string | null;
+  starterIds?: string[];
+}
+
+/** Controlli della formazione con il regolamento della lega (modulo, ruoli, panchina, capitano). */
+export function validateLineup(l: LineupCheck, cfg: LeagueConfig): string[] {
   const errors: string[] = [];
-  if (!cfg.modules.includes(module)) errors.push(`Modulo ${module.split("").join("-")} non ammesso dalla lega`);
-  const shape = moduleShape(module);
+  if (!cfg.modules.includes(l.module)) errors.push(`Modulo ${l.module.split("").join("-")} non ammesso dalla lega`);
+  const shape = moduleShape(l.module);
   if (shape) {
     const want = [1, ...shape];
     const names = ["portiere", "difensori", "centrocampisti", "attaccanti"];
     ROLES.forEach((r, i) => {
-      const n = starters.filter((p) => p.role === r).length;
+      const n = l.starters.filter((p) => p.role === r).length;
       if (n !== want[i]) errors.push(`Servono ${want[i]} ${names[i]} (ora ${n})`);
     });
   }
-  if (starters.length !== 11) errors.push(`Servono 11 titolari (ora ${starters.length})`);
-  if (bench.length > cfg.benchCount) errors.push(`Massimo ${cfg.benchCount} panchinari`);
+  if (l.starters.length !== 11) errors.push(`Servono 11 titolari (ora ${l.starters.length})`);
+  if (l.bench.length > cfg.benchCount) errors.push(`Massimo ${cfg.benchCount} panchinari`);
+  if (cfg.benchPerRole) {
+    ROLES.forEach((r) => {
+      const n = l.bench.filter((p) => p.role === r).length;
+      if (n > cfg.benchPerRole![r - 1]) errors.push(`Massimo ${cfg.benchPerRole![r - 1]} panchinari ${["", "portieri", "difensori", "centrocampisti", "attaccanti"][r]}`);
+    });
+  }
+  if (cfg.modifiers.captain.enabled && l.starterIds) {
+    if (!l.captain || !l.starterIds.includes(l.captain)) errors.push("Scegli il capitano tra i titolari");
+    if (!l.vice || !l.starterIds.includes(l.vice)) errors.push("Scegli il vice capitano tra i titolari");
+    if (l.captain && l.captain === l.vice) errors.push("Capitano e vice devono essere diversi");
+  }
   return errors;
 }
 

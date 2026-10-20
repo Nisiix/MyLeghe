@@ -40,13 +40,23 @@ function Editor({ teamId, proxyName, round, started, scored, cfg, current }: { t
   const qc = useQueryClient();
   const byId = useMemo(() => new Map(scored.map((p) => [p.id, p])), [scored]);
   const initial = useMemo(() => {
-    if (current) return { module: current.module, starters: current.starters.map(String), bench: current.bench.map(String) };
+    if (current) {
+      return {
+        module: current.module, starters: current.starters.map(String), bench: current.bench.map(String),
+        captain: current.captain != null ? String(current.captain) : null, vice: current.vice != null ? String(current.vice) : null,
+      };
+    }
     const sug = suggestLineup(scored, cfg);
-    return sug ? { module: sug.module, starters: sug.starters.map((p) => p.id), bench: sug.bench.map((p) => p.id) } : { module: cfg.modules[0], starters: [], bench: [] };
+    return sug
+      ? { module: sug.module, starters: sug.starters.map((p) => p.id), bench: sug.bench.map((p) => p.id), captain: sug.captain, vice: sug.vice }
+      : { module: cfg.modules[0], starters: [] as string[], bench: [] as string[], captain: null, vice: null };
   }, [current, scored, cfg]);
   const [module, setModule] = useState(initial.module);
   const [starters, setStarters] = useState<string[]>(initial.starters);
   const [bench, setBench] = useState<string[]>(initial.bench);
+  const [captain, setCaptain] = useState<string | null>(initial.captain);
+  const [vice, setVice] = useState<string | null>(initial.vice);
+  const captainOn = cfg.modifiers.captain.enabled;
   const [picking, setPicking] = useState<{ role: number; replace: string | null } | null>(null);
   const [confirmForce, setConfirmForce] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -56,7 +66,7 @@ function Editor({ teamId, proxyName, round, started, scored, cfg, current }: { t
   const benchRows = bench.map((id) => byId.get(id)).filter(Boolean) as Row[];
   const used = new Set([...starters, ...bench]);
   const stands = scored.filter((p) => !used.has(p.id)).sort((a, b) => a.role - b.role || b.score - a.score);
-  const errors = validateLineup(starterRows, bench, module, cfg);
+  const errors = validateLineup({ starters: starterRows, bench: benchRows, module, starterIds: starters, captain, vice }, cfg);
   const expected = starterRows.reduce((sum, p) => sum + (Number.isNaN(p.score) ? 0 : p.score), 0);
 
   function applySuggestion() {
@@ -65,6 +75,8 @@ function Editor({ teamId, proxyName, round, started, scored, cfg, current }: { t
     setModule(sug.module);
     setStarters(sug.starters.map((p) => p.id));
     setBench(sug.bench.map((p) => p.id));
+    setCaptain(sug.captain);
+    setVice(sug.vice);
     setMessage({ ok: true, text: `Formazione consigliata applicata (${sug.module.split("").join("-")}). Controlla e salva.` });
   }
 
@@ -86,7 +98,9 @@ function Editor({ teamId, proxyName, round, started, scored, cfg, current }: { t
     const newBench = [...kept, ...dropped].slice(0, cfg.benchCount);
     setModule(mod);
     setStarters(next);
-    setBench(newBench.length ? newBench : orderBench(pool.filter((p) => !nextSet.has(p.id)), cfg.benchCount).map((p) => p.id));
+    setBench(newBench.length ? newBench : orderBench(pool.filter((p) => !nextSet.has(p.id)), cfg.benchCount, cfg.benchPerRole).map((p) => p.id));
+    if (captain && !nextSet.has(captain)) setCaptain(null);
+    if (vice && !nextSet.has(vice)) setVice(null);
     setMessage(null);
   }
 
@@ -95,6 +109,8 @@ function Editor({ teamId, proxyName, round, started, scored, cfg, current }: { t
     if (picking.replace !== null) {
       const replaced = picking.replace;
       setStarters(starters.map((x) => (x === replaced ? id : x)));
+      if (captain === replaced) setCaptain(id);
+      if (vice === replaced) setVice(id);
       if (bench.includes(id)) setBench(bench.map((x) => (x === id ? replaced : x)));
     } else {
       setBench([...bench, id].slice(0, cfg.benchCount));
@@ -107,7 +123,7 @@ function Editor({ teamId, proxyName, round, started, scored, cfg, current }: { t
     setSaving(true);
     setMessage(null);
     try {
-      await api(`/league/lineups/${round}/${teamId}`, { method: "PUT", body: { module, starters: starters.map(Number), bench: bench.map(Number), forced: forced || !!proxyName } });
+      await api(`/league/lineups/${round}/${teamId}`, { method: "PUT", body: { module, starters: starters.map(Number), bench: bench.map(Number), captain: captainOn && captain ? Number(captain) : null, vice: captainOn && vice ? Number(vice) : null, forced: forced || !!proxyName } });
       await qc.invalidateQueries({ queryKey: ["lineups"] });
       setConfirmForce(false);
       setMessage({ ok: true, text: proxyName ? `Formazione di ${proxyName} inserita: risulterà inserita da te.` : forced ? "Formazione modificata a giornata iniziata: la modifica è visibile a tutta la lega." : "Formazione salvata." });
@@ -156,11 +172,25 @@ function Editor({ teamId, proxyName, round, started, scored, cfg, current }: { t
       <div className="pitch flex flex-col gap-5 rounded-2xl px-2 py-5">
         {rows.map((r) => (
           <div key={r.role} className="flex justify-center gap-1">
-            {r.players.map((p) => <PitchPlayer key={p.id} p={p} onClick={() => setPicking({ role: p.role, replace: p.id })} />)}
+            {r.players.map((p) => <PitchPlayer key={p.id} p={p} badge={captainOn ? (p.id === captain ? "C" : p.id === vice ? "VC" : null) : null} onClick={() => setPicking({ role: p.role, replace: p.id })} />)}
           </div>
         ))}
       </div>
       <p className="-mt-2 text-[11px] text-muted">Sotto ogni giocatore la titolarità stimata da FootballLite (dati BSD). Tocca un giocatore per sostituirlo.</p>
+
+      {captainOn && (
+        <div className="grid grid-cols-2 gap-3 text-sm">
+          {([["Capitano", captain, setCaptain], ["Vice capitano", vice, setVice]] as const).map(([label, value, setter]) => (
+            <label key={label} className="flex flex-col gap-1">
+              <span className="font-semibold">{label}</span>
+              <select className="rounded-lg border border-line bg-surface px-2 py-2" value={value ?? ""} onChange={(e) => setter(e.target.value || null)}>
+                <option value="">Scegli…</option>
+                {starterRows.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+              </select>
+            </label>
+          ))}
+        </div>
+      )}
 
       {errors.length > 0 && <div className="rounded-xl border border-warn/40 bg-card/20 p-3 text-sm">{errors.map((e) => <div key={e}>{e}</div>)}</div>}
       {message && <div className={`rounded-xl p-3 text-sm ${message.ok ? "bg-accent/10 text-accent" : "bg-danger/10 text-danger"}`}>{message.text}</div>}
@@ -237,11 +267,14 @@ function statusText(o?: Outlook): string {
   return o.opponent ? `${o.opponent} ·` : "";
 }
 
-function PitchPlayer({ p, onClick }: { p: Row; onClick: () => void }) {
+function PitchPlayer({ p, badge, onClick }: { p: Row; badge: "C" | "VC" | null; onClick: () => void }) {
   const low = !Number.isNaN(p.starterPercent) && p.starterPercent < 70;
   return (
     <button onClick={onClick} className="flex w-[74px] flex-col items-center gap-0.5 text-center text-chalk">
-      <span className={`rounded-full p-0.5 ${low ? "ring-2 ring-card" : ""}`}><PlayerAvatar name={p.name} role={p.role} size={44} /></span>
+      <span className={`relative rounded-full p-0.5 ${low ? "ring-2 ring-card" : ""}`}>
+        <PlayerAvatar name={p.name} role={p.role} size={44} />
+        {badge && <span className="absolute -right-1 -top-1 rounded-full bg-card px-1 text-[10px] font-bold text-card-ink">{badge}</span>}
+      </span>
       <StarterPercent percent={p.starterPercent} />
       <span className="w-full truncate rounded bg-black/45 px-1 text-[11px] font-semibold leading-4">{p.name}</span>
       <span className="text-[10px] leading-3 text-chalk/75">{p.outlook?.opponent ?? ""}</span>

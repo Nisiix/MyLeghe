@@ -32,19 +32,20 @@ league.post("/setup/terms", async (c) => {
   return c.json({ accepted: true });
 });
 
-league.post("/setup/league", async (c) => {
-  const { setupCode, name, acceptSourcesTerms } = await c.req.json<{ setupCode: string; name: string; acceptSourcesTerms?: boolean }>();
-  if (!c.env.SETUP_CODE || setupCode !== c.env.SETUP_CODE) return c.json({ error: "Codice di setup non valido" }, 403);
-  if (!name?.trim()) return c.json({ error: "Nome lega obbligatorio" }, 400);
-  if (!(await sourcesAccepted(c.env))) {
-    if (acceptSourcesTerms !== true) return c.json({ error: "Prima accetta i termini d'uso delle fonti dati.", needsTerms: true }, 400);
-    await kvSet(c.env, "terms:sources", { version: SOURCE_TERMS.version, acceptedAt: Date.now() });
-  }
+/** Creazione di una lega: chi la crea ne diventa admin e riceve il codice invito e il codice admin. */
+league.post("/leagues", async (c) => {
+  const { name, acceptAppTerms } = await c.req.json<{ name: string; acceptAppTerms?: boolean }>();
+  if (acceptAppTerms !== true) return c.json({ error: "Accetta le condizioni d'uso per creare una lega." }, 400);
+  if (!name?.trim() || name.trim().length > 60) return c.json({ error: "Nome lega obbligatorio (massimo 60 caratteri)" }, 400);
+  // Limite semplice contro gli abusi: al massimo 50 leghe create al giorno nell'installazione.
+  const today = await c.env.DB.prepare("SELECT COUNT(*) AS n FROM leagues WHERE created_at > ?").bind(Date.now() - 86400_000).first<{ n: number }>();
+  if ((today?.n ?? 0) >= 50) return c.json({ error: "Troppe leghe create oggi: riprova domani." }, 429);
   const id = crypto.randomUUID();
   const leagueCode = newCode(8), adminCode = newCode(12);
   await c.env.DB.prepare("INSERT INTO leagues (id, name, code_hash, admin_hash, settings, created_at) VALUES (?, ?, ?, ?, ?, ?)")
     .bind(id, name.trim(), await sha256(leagueCode), await sha256(adminCode), JSON.stringify(normalizeConfig({})), Date.now()).run();
-  return c.json({ leagueId: id, leagueCode, adminCode });
+  const claims = { lid: id, tids: [] as number[], admin: true, exp: Math.floor(Date.now() / 1000) + SESSION_DAYS * 86400 };
+  return c.json({ league: { id, name: name.trim() }, leagueCode, adminCode, token: await signSession(c.env, claims) });
 });
 
 // ---- Accesso -----------------------------------------------------------------------------------
@@ -224,7 +225,7 @@ league.get("/league/admin/players", async (c) => {
 
 // ---- Formazioni ------------------------------------------------------------------------------
 
-interface LineupRow { id: number; team_id: number; round: number; module: string; starters: string; bench: string; forced: number; created_at: number; entered_by: number | null }
+interface LineupRow { id: number; team_id: number; round: number; module: string; starters: string; bench: string; forced: number; created_at: number; entered_by: number | null; captain: number | null; vice: number | null }
 
 const parseLineup = (r: LineupRow) => ({ ...r, starters: JSON.parse(r.starters) as number[], bench: JSON.parse(r.bench) as number[], forced: !!r.forced });
 
@@ -237,8 +238,17 @@ league.get("/league/lineups/:round", async (c) => {
     `SELECT l.* FROM lineups l JOIN (SELECT team_id, MAX(id) AS id FROM lineups WHERE league_id = ? AND round = ? GROUP BY team_id) last ON last.id = l.id`,
   ).bind(s.lid, round).all<LineupRow>();
   const started = round < info.matchday || (round === info.matchday && info.phase !== "upcoming");
-  const list = (rows.results ?? []).map(parseLineup).map((l) =>
+  const list: Record<string, unknown>[] = (rows.results ?? []).map(parseLineup).map((l) =>
     started || s.tids.includes(l.team_id) ? l : { team_id: l.team_id, round: l.round, hidden: true, created_at: l.created_at });
+  // Regola "ultima formazione": a giornata iniziata, chi non ha schierato gioca con l'ultima formazione inserita.
+  const cfg = await loadConfig(c.env.DB, s.lid);
+  if (started && cfg.noLineup.mode === "last") {
+    const have = new Set((rows.results ?? []).map((r) => r.team_id));
+    const prev = await c.env.DB.prepare(
+      `SELECT l.* FROM lineups l JOIN (SELECT team_id, MAX(id) AS id FROM lineups WHERE league_id = ? AND round < ? GROUP BY team_id) last ON last.id = l.id`,
+    ).bind(s.lid, round).all<LineupRow>();
+    for (const p of prev.results ?? []) if (!have.has(p.team_id)) list.push({ ...parseLineup(p), round, recovered: true });
+  }
   return c.json({ round, started, lineups: list });
 });
 
@@ -263,7 +273,7 @@ league.put("/league/lineups/:round/:teamId", async (c) => {
   const s = c.get("session");
   const teamId = Number(c.req.param("teamId"));
   const round = Number(c.req.param("round"));
-  const body = await c.req.json<{ module: string; starters: number[]; bench: number[]; forced?: boolean }>();
+  const body = await c.req.json<{ module: string; starters: number[]; bench: number[]; captain?: number | null; vice?: number | null; forced?: boolean }>();
   const cfg = await loadConfig(c.env.DB, s.lid);
   const info = await activeRound(c.env);
   if (round !== info.matchday) return c.json({ error: `Si può schierare solo la giornata ${info.matchday}.` }, 400);
@@ -288,11 +298,19 @@ league.put("/league/lineups/:round/:teamId", async (c) => {
   const roles = new Map((roster.results ?? []).map((r) => [r.slot, r.role]));
   const all = [...body.starters, ...body.bench];
   if (new Set(all).size !== all.length || all.some((x) => !roles.has(x))) return c.json({ error: "Giocatori non validi o ripetuti" }, 400);
-  const errors = validateLineup(body.starters.map((x) => ({ role: roles.get(x)! })), body.bench, body.module, cfg);
+  const errors = validateLineup({
+    starters: body.starters.map((x) => ({ role: roles.get(x)! })),
+    bench: body.bench.map((x) => ({ role: roles.get(x)! })),
+    module: body.module,
+    starterIds: body.starters.map(String),
+    captain: body.captain === null || body.captain === undefined ? null : String(body.captain),
+    vice: body.vice === null || body.vice === undefined ? null : String(body.vice),
+  }, cfg);
   if (errors.length) return c.json({ error: errors.join(". ") }, 400);
 
-  await c.env.DB.prepare("INSERT INTO lineups (league_id, team_id, round, module, starters, bench, forced, created_at, entered_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)")
-    .bind(s.lid, teamId, round, body.module, JSON.stringify(body.starters), JSON.stringify(body.bench), started ? 1 : 0, Date.now(), enteredBy).run();
+  await c.env.DB.prepare("INSERT INTO lineups (league_id, team_id, round, module, starters, bench, forced, created_at, entered_by, captain, vice) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
+    .bind(s.lid, teamId, round, body.module, JSON.stringify(body.starters), JSON.stringify(body.bench), started ? 1 : 0, Date.now(), enteredBy,
+      cfg.modifiers.captain.enabled ? body.captain ?? null : null, cfg.modifiers.captain.enabled ? body.vice ?? null : null).run();
   return c.json({ ok: true, forced: started, enteredBy });
 });
 

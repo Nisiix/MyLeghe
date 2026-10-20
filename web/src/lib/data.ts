@@ -78,7 +78,7 @@ export function useLive(round: number | undefined, live: boolean) {
   });
 }
 
-export interface Lineup { id: number; team_id: number; round: number; module: string; starters: number[]; bench: number[]; forced: boolean; created_at: number; entered_by?: number | null; hidden?: boolean }
+export interface Lineup { id: number; team_id: number; round: number; module: string; starters: number[]; bench: number[]; forced: boolean; created_at: number; entered_by?: number | null; captain?: number | null; vice?: number | null; recovered?: boolean; hidden?: boolean }
 
 export function useLineups(round: number | undefined) {
   const s = useSession();

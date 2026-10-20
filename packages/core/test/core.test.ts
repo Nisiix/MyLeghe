@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   DEFAULT_CONFIG, dueReminder, goalsFromPoints, matchPlayer, normalizeConfig, parseCsv, parseRosterGrid,
-  parseCalendarGrid, playerLiveScore, projectTeam, scorePlayers, starterDrops, starterProbability, suggestLineup, validateLineup,
+  parseCalendarGrid, playerLiveScore, computeTeam, computeMatch, matchGoals, noLineupScore, scorePlayers, starterDrops, starterProbability, suggestLineup, validateLineup,
   type Cell, type RosterEntry,
 } from "../src";
 
@@ -110,7 +110,8 @@ describe("titolarità e formazione consigliata", () => {
     const s = suggestLineup(scorePlayers(roster, outlook, cfg), cfg)!;
     expect(cfg.modules).toContain(s.module);
     expect(s.starters[0].id).toBe("p1");
-    expect(validateLineup(s.starters, s.bench, s.module, cfg)).toEqual([]);
+    expect(validateLineup({ starters: s.starters, bench: s.bench, module: s.module }, cfg)).toEqual([]);
+    expect(s.captain).not.toBeNull();
     expect(s.bench.length).toBeLessThanOrEqual(cfg.benchCount);
   });
 });
@@ -127,11 +128,75 @@ describe("calcolo live", () => {
     expect(playerLiveScore("z", 3, undefined, "finished", cfg).state).toBe("absent");
   });
 
-  it("sostituisce i titolari senza voto", () => {
-    const s = (id: string, role: 1 | 2 | 3 | 4, fv: number | null) => ({ id, role, state: fv === null ? "absent" as const : "played" as const, vote: fv, bonus: 0, fantavote: fv });
-    const p = projectTeam([s("a", 1, 6), s("b", 2, null)], [s("c", 3, 7), s("d", 2, 6.5)], cfg);
-    expect(p.substitutions).toEqual([{ out: "b", in: "d" }]);
-    expect(p.total).toBe(12.5);
+  const P = (id: string, role: 1 | 2 | 3 | 4, vote: number | null, extra: Partial<{ bonus: number; yellow: number; goals: number; state: "played" | "pending" | "absent" }> = {}) => ({
+    id, role, vote, bonus: extra.bonus ?? 0, fantavote: vote === null ? null : vote + (extra.bonus ?? 0),
+    state: extra.state ?? (vote === null ? "absent" as const : "played" as const), yellow: extra.yellow ?? 0, red: 0, goals: extra.goals ?? 0, assists: 0,
+  });
+  const xi = () => [P("p", 1, 6), P("d1", 2, 6), P("d2", 2, 6.5), P("d3", 2, 7), P("d4", 2, 6), P("c1", 3, 6), P("c2", 3, 6), P("c3", 3, 6), P("c4", 3, 6), P("a1", 4, 6), P("a2", 4, 6)];
+
+  it("sostituisce per ruolo e assegna il voto d'ufficio", () => {
+    const starters = xi(); starters[1] = P("d1", 2, null); starters[9] = P("a1", 4, null);
+    const c = { ...cfg, substitutions: { ...cfg.substitutions, officeVoteField: 4 } };
+    const t = computeTeam({ module: "442", starters, bench: [P("b1", 3, 7), P("b2", 2, 6.5)] }, c, true);
+    expect(t.substitutions).toEqual([{ out: "d1", in: "b2" }, { out: "a1", in: null }]);
+    expect(t.base).toBe(6 + 6.5 + 6.5 + 7 + 6 + 6 * 4 + 4 + 6);
+  });
+
+  it("sostituzione libera solo se il modulo risultante è ammesso", () => {
+    const starters = xi(); starters[1] = P("d1", 2, null);
+    const free = { ...cfg, substitutions: { ...cfg.substitutions, mode: "free" as const } };
+    expect(computeTeam({ module: "442", starters, bench: [P("b1", 3, 7)] }, free, true).substitutions).toEqual([{ out: "d1", in: "b1" }]); // 3-5-2 ammesso
+    expect(computeTeam({ module: "442", starters, bench: [P("b1", 3, 7)] }, cfg, true).substitutions).toEqual([]); // per ruolo: no
+  });
+
+  it("in parziale chi deve giocare non conta e non viene sostituito", () => {
+    const starters = xi(); starters[5] = P("c1", 3, 6, { state: "pending" });
+    const t = computeTeam({ module: "442", starters, bench: [P("b1", 3, 7)] }, cfg, false);
+    expect(t.substitutions).toEqual([]);
+    expect(t.counted.length).toBe(10);
+  });
+
+  it("applica capitano e modificatori", () => {
+    const c = {
+      ...cfg,
+      modifiers: {
+        ...cfg.modifiers,
+        captain: { enabled: true, doubleBonus: true, doubleMalus: false, bands: [] },
+        defense: { ...cfg.modifiers.defense, enabled: true },
+        goalkeeper: { enabled: true, bands: [{ from: 6, value: 1 }] },
+        fairPlay: { enabled: true, value: 1 },
+      },
+    };
+    const starters = xi(); starters[9] = P("a1", 4, 7, { bonus: 3, goals: 1 });
+    const t = computeTeam({ module: "442", starters, bench: [], captain: "a1", vice: "a2" }, c, true);
+    // difesa: migliori 3 difensori (7, 6.5, 6) + portiere 6 → media 6.375 → fascia 6 → +1
+    expect(t.mods).toEqual([{ label: "Capitano", value: 3 }, { label: "Modificatore portiere", value: 1 }, { label: "Modificatore difesa", value: 1 }, { label: "Fair play", value: 1 }]);
+    expect(t.total).toBe(t.base + 6);
+  });
+
+  it("modificatori di partita: centrocampo, difesa all'avversario, fattore campo e regole gol", () => {
+    const c = {
+      ...cfg,
+      modifiers: { ...cfg.modifiers, midfield: { enabled: true, bands: [{ from: 2, value: 1 }] }, defense: { ...cfg.modifiers.defense, enabled: true, applyTo: "opponent" as const }, homeAdvantage: { enabled: true, value: 2 } },
+    };
+    const home = computeTeam({ module: "442", starters: xi(), bench: [] }, c, true);
+    const awayXi = xi().map((p) => (p.role === 3 ? P(p.id, 3, 5) : p));
+    const away = computeTeam({ module: "442", starters: awayXi, bench: [] }, c, true);
+    const m = computeMatch(home, away, c);
+    expect(m.home.matchMods).toEqual([{ label: "Modificatore centrocampo", value: 1 }, { label: "Modificatore difesa avversario", value: -1 }, { label: "Fattore campo", value: 2 }]);
+    expect(m.away.matchMods).toEqual([{ label: "Modificatore centrocampo", value: -1 }, { label: "Modificatore difesa avversario", value: -1 }]);
+    expect(matchGoals(66, 65, { ...cfg, goalRules: { ...cfg.goalRules, drawWithin: 2 } })).toEqual([0, 0]);
+    expect(matchGoals(60, 64, { ...cfg, goalRules: { ...cfg.goalRules, winByMargin: 3, winByMarginUnderFirst: true } })).toEqual([0, 1]);
+    expect(noLineupScore(cfg)).toBeNull();
+    expect(noLineupScore({ ...cfg, noLineup: { mode: "fixed", points: 0 } })?.total).toBe(0);
+  });
+
+  it("controlla panchina per ruolo e capitano", () => {
+    const c = { ...cfg, benchPerRole: [1, 2, 2, 2] as [number, number, number, number], modifiers: { ...cfg.modifiers, captain: { ...cfg.modifiers.captain, enabled: true } } };
+    const starters = xi();
+    const errors = validateLineup({ starters, bench: [{ role: 1 }, { role: 1 }], module: "442", starterIds: starters.map((p) => p.id), captain: "p", vice: "p" }, c);
+    expect(errors).toContain("Massimo 1 panchinari portieri");
+    expect(errors).toContain("Capitano e vice devono essere diversi");
   });
 });
 

@@ -47,6 +47,13 @@ export async function enterLeague(leagueCode: string, adminCode?: string): Promi
   return r;
 }
 
+/** Creazione di una nuova lega: chi la crea ne diventa admin (riceve codice invito e codice admin). */
+export async function createLeague(name: string): Promise<{ leagueCode: string; adminCode: string }> {
+  const r = await api<{ league: { id: string; name: string }; leagueCode: string; adminCode: string; token: string }>("/leagues", { method: "POST", body: { name, acceptAppTerms: true } });
+  session.set({ token: r.token, league: r.league, admin: true, myTeamId: null });
+  return { leagueCode: r.leagueCode, adminCode: r.adminCode };
+}
+
 /** Secondo passo: scelta dell'utente (squadra). */
 export async function chooseTeam(teamId: number): Promise<void> {
   const r = await api<{ token: string; teamId: number }>("/session/team", { method: "POST", body: { teamId } });

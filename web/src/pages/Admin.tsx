@@ -1,9 +1,7 @@
-import {
-  DEFAULT_CONFIG, normalizeConfig, parseCalendarGrid, parseRosterGrid, ROLE_LABEL,
-  type BonusTable, type CalendarImport, type ImportResult, type LeagueConfig,
-} from "@footballlite/core";
+import { parseCalendarGrid, parseRosterGrid, type CalendarImport, type ImportResult, type LeagueConfig } from "@footballlite/core";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
+import { RulesEditor } from "../components/RulesEditor";
 import { Button, Card, Empty, ErrorBox, RoleTag, Spinner } from "../components/ui";
 import { api } from "../lib/api";
 import { readGrid } from "../lib/files";
@@ -21,7 +19,7 @@ export function AdminPage() {
       <RosterImport config={league.data.league.config} />
       <CalendarImportCard />
       <Unmatched />
-      <SettingsForm config={league.data.league.config} />
+      <RulesEditor config={league.data.league.config} />
     </div>
   );
 }
@@ -194,86 +192,6 @@ function Unmatched() {
           })}
         </ul>
       )}
-    </Card>
-  );
-}
-
-const BONUS_LABEL: Record<keyof BonusTable, string> = {
-  goal: "Gol", assist: "Assist", yellow: "Ammonizione", red: "Espulsione", penaltyScored: "Rigore segnato",
-  penaltyMissed: "Rigore sbagliato", penaltySaved: "Rigore parato", ownGoal: "Autogol", goalConceded: "Gol subito", cleanSheet: "Porta inviolata",
-};
-
-function SettingsForm({ config }: { config: LeagueConfig }) {
-  const qc = useQueryClient();
-  const [c, setC] = useState<LeagueConfig>(config);
-  const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
-  const numIn = "w-16 rounded-lg border border-line bg-surface px-2 py-1 text-right tabular";
-
-  async function save() {
-    setMsg(null);
-    try {
-      await api("/league/admin/settings", { method: "PUT", body: normalizeConfig(c) });
-      await qc.invalidateQueries({ queryKey: ["league"] });
-      setMsg({ ok: true, text: "Regolamento salvato." });
-    } catch (e) { setMsg({ ok: false, text: (e as Error).message }); }
-  }
-  const setBonus = (k: keyof BonusTable, i: number, v: number) => setC({ ...c, bonus: { ...c.bonus, [k]: c.bonus[k].map((x, j) => (j === i ? v : x)) } });
-  const allModules = [...new Set([...DEFAULT_CONFIG.modules, ...c.modules])];
-
-  return (
-    <Card title="Regolamento">
-      <div className="flex flex-col gap-4 text-sm">
-        <fieldset>
-          <legend className="mb-1 font-semibold">Giocatori per ruolo nel file delle rose</legend>
-          <div className="flex gap-3">
-            {c.rosterScheme.map((n, i) => (
-              <label key={i} className="flex items-center gap-1">{ROLE_LABEL[i + 1]}
-                <input type="number" min={0} max={15} className={numIn} value={n} onChange={(e) => setC({ ...c, rosterScheme: c.rosterScheme.map((x, j) => (j === i ? Number(e.target.value) : x)) as LeagueConfig["rosterScheme"] })} />
-              </label>
-            ))}
-          </div>
-        </fieldset>
-        <fieldset>
-          <legend className="mb-1 font-semibold">Moduli ammessi</legend>
-          <div className="flex flex-wrap gap-2">
-            {allModules.map((m) => (
-              <label key={m} className="flex items-center gap-1 tabular">
-                <input type="checkbox" className="accent-[var(--color-accent)]" checked={c.modules.includes(m)} onChange={(e) => setC({ ...c, modules: e.target.checked ? [...c.modules, m] : c.modules.filter((x) => x !== m) })} />
-                {m.split("").join("-")}
-              </label>
-            ))}
-          </div>
-        </fieldset>
-        <div className="grid grid-cols-2 gap-3">
-          <label className="flex items-center justify-between gap-2">Panchinari <input type="number" min={0} max={20} className={numIn} value={c.benchCount} onChange={(e) => setC({ ...c, benchCount: Number(e.target.value) })} /></label>
-          <label className="flex items-center justify-between gap-2">Sostituzioni <input type="number" min={0} max={11} className={numIn} value={c.maxSubstitutions} onChange={(e) => setC({ ...c, maxSubstitutions: Number(e.target.value) })} /></label>
-          <label className="flex items-center justify-between gap-2">Prima soglia gol <input type="number" step={0.5} className={numIn} value={c.goalFirst} onChange={(e) => setC({ ...c, goalFirst: Number(e.target.value) })} /></label>
-          <label className="flex items-center justify-between gap-2">Ampiezza soglie <input type="number" step={0.5} min={0.5} className={numIn} value={c.goalSteps[0]} onChange={(e) => setC({ ...c, goalSteps: [Number(e.target.value)] })} /></label>
-          <label className="flex items-center justify-between gap-2">Voto base <input type="number" step={0.5} className={numIn} value={c.baseVote} onChange={(e) => setC({ ...c, baseVote: Number(e.target.value) })} /></label>
-        </div>
-        <label className="flex items-center justify-between gap-3">Stima il voto dal rating della fonte dati (altrimenti voto base a tutti)
-          <input type="checkbox" className="size-5 accent-[var(--color-accent)]" checked={c.voteFromRating} onChange={(e) => setC({ ...c, voteFromRating: e.target.checked })} />
-        </label>
-        <label className="flex items-center justify-between gap-3">Consenti la modifica della formazione a giornata iniziata
-          <input type="checkbox" className="size-5 accent-[var(--color-accent)]" checked={c.allowForcedEdit} onChange={(e) => setC({ ...c, allowForcedEdit: e.target.checked })} />
-        </label>
-        <fieldset>
-          <legend className="mb-1 font-semibold">Bonus e malus per ruolo</legend>
-          <table className="w-full text-xs tabular">
-            <thead><tr><th className="text-left font-normal text-muted" />{[1, 2, 3, 4].map((r) => <th key={r} className="font-normal text-muted">{ROLE_LABEL[r]}</th>)}</tr></thead>
-            <tbody>
-              {(Object.keys(BONUS_LABEL) as (keyof BonusTable)[]).map((k) => (
-                <tr key={k}>
-                  <td className="py-0.5 pr-2">{BONUS_LABEL[k]}</td>
-                  {c.bonus[k].map((v, i) => <td key={i} className="py-0.5"><input type="number" step={0.5} className="w-14 rounded border border-line bg-surface px-1 text-right" value={v} onChange={(e) => setBonus(k, i, Number(e.target.value))} /></td>)}
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </fieldset>
-        <Button onClick={save}>Salva regolamento</Button>
-        {msg && <p className={`text-xs ${msg.ok ? "text-accent" : "text-danger"}`}>{msg.text}</p>}
-      </div>
     </Card>
   );
 }

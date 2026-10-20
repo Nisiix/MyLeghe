@@ -1,17 +1,23 @@
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { Button, Card, ErrorBox, TeamBadge } from "../components/ui";
-import { acceptAppTerms, api, ApiError, appTermsAccepted, chooseTeam, enterLeague, savedLeagueCode, type LeagueAccess } from "../lib/api";
-import { session, useSession } from "../lib/session";
+import { acceptAppTerms, api, ApiError, appTermsAccepted, chooseTeam, createLeague, enterLeague, savedLeagueCode, type LeagueAccess } from "../lib/api";
+import { session, useLeagues, useSession } from "../lib/session";
 
 const codeInput = "rounded-xl border border-line bg-surface px-3 py-3 uppercase tracking-widest outline-none focus:border-accent";
 
-/** Accesso in due passi: codice condiviso della lega, poi scelta del proprio utente. */
+/**
+ * Accesso: si entra in una lega con il codice invito (poi si sceglie il proprio utente) oppure se ne crea una nuova.
+ * Le leghe già usate su questo dispositivo si riaprono in automatico.
+ */
 export function Access() {
   const s = useSession();
+  const [params] = useSearchParams();
+  const navigate = useNavigate();
+  const saved = useLeagues();
   const [access, setAccess] = useState<LeagueAccess | null>(null);
-  const [create, setCreate] = useState(false);
+  const [mode, setMode] = useState<"choose" | "join" | "create">(params.has("crea") ? "create" : params.has("nuova") ? "join" : "choose");
 
   // Sessione già aperta ma utente non scelto (es. dopo "Cambia utente"): si ricarica l'elenco.
   const pending = useQuery({
@@ -32,12 +38,30 @@ export function Access() {
         <h1 className="scoreboard text-5xl leading-none">FootballLite</h1>
         <p className="mt-2 text-sm text-muted">La tua lega, la tua formazione, il live della giornata.</p>
       </div>
-      {create ? (
-        <CreateLeague onBack={() => setCreate(false)} />
-      ) : s && teams ? (
+      {s && teams ? (
         <ChooseUser teams={teams} admin={s.admin} />
+      ) : mode === "create" ? (
+        <CreateLeague onBack={() => setMode("choose")} />
+      ) : mode === "join" ? (
+        <EnterCode onEntered={setAccess} onBack={() => setMode("choose")} />
       ) : (
-        <EnterCode onEntered={setAccess} onCreate={() => setCreate(true)} />
+        <div className="flex flex-col gap-3">
+          {saved.length > 0 && (
+            <div className="mb-2">
+              <p className="mb-2 text-sm font-semibold">Le tue leghe</p>
+              <ul className="flex flex-col gap-2">
+                {saved.map((l) => (
+                  <li key={l.id}>
+                    <button onClick={() => { session.switchTo(l.id); navigate("/", { replace: true }); }} className="w-full rounded-xl border border-line bg-surface px-3 py-2.5 text-left font-semibold hover:border-accent">{l.name}</button>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+          <Button variant="card" className="py-3 text-base" onClick={() => setMode("join")}>Entra in una lega</Button>
+          <Button variant="ghost" className="py-3" onClick={() => setMode("create")}>Crea una lega</Button>
+          <p className="text-xs text-muted">Per entrare ti serve il codice invito che ti ha dato l'admin della lega. Chi crea una lega ne diventa admin e importa rose, calendario e regolamento.</p>
+        </div>
       )}
       <p className="mt-8 text-[11px] text-muted">
         FootballLite non è affiliata a Leghe Fantacalcio® né a Fantacalcio S.r.l. Rose e calendario sono importati dall'admin della lega; i dati di Serie A arrivano da fonti con licenza.
@@ -46,7 +70,7 @@ export function Access() {
   );
 }
 
-function EnterCode({ onEntered, onCreate }: { onEntered: (a: LeagueAccess) => void; onCreate: () => void }) {
+function EnterCode({ onEntered, onBack }: { onEntered: (a: LeagueAccess) => void; onBack: () => void }) {
   const navigate = useNavigate();
   const [leagueCode, setLeagueCode] = useState(savedLeagueCode());
   const [adminCode, setAdminCode] = useState("");
@@ -76,7 +100,7 @@ function EnterCode({ onEntered, onCreate }: { onEntered: (a: LeagueAccess) => vo
   return (
     <form onSubmit={submit} className="flex flex-col gap-3">
       <label className="flex flex-col gap-1 text-sm">
-        <span className="font-semibold">Codice della lega</span>
+        <span className="font-semibold">Codice invito della lega</span>
         <input className={codeInput} value={leagueCode} onChange={(e) => setLeagueCode(e.target.value)} autoComplete="off" required />
       </label>
       <details className="text-sm">
@@ -91,7 +115,7 @@ function EnterCode({ onEntered, onCreate }: { onEntered: (a: LeagueAccess) => vo
       )}
       {!!error && <ErrorBox error={error} />}
       <Button type="submit" variant="card" disabled={busy || !terms} className="mt-2 py-3 text-base">{busy ? "Verifica…" : "Entra"}</Button>
-      <button type="button" className="mt-4 text-xs text-muted underline" onClick={onCreate}>Crea una nuova lega</button>
+      <button type="button" className="mt-2 text-xs text-muted underline" onClick={onBack}>Indietro</button>
     </form>
   );
 }
@@ -139,28 +163,24 @@ function ChooseUser({ teams, admin }: { teams: { id: number; name: string }[]; a
       </ul>
       {!!error && <ErrorBox error={error} />}
       {admin && <button className="text-xs text-muted underline" onClick={() => navigate("/admin")}>Vai alla gestione della lega</button>}
-      <button className="text-xs text-muted underline" onClick={() => session.logout()}>Usa un altro codice</button>
+      <button className="text-xs text-muted underline" onClick={() => session.logout()}>Esci da questa lega</button>
     </div>
   );
 }
 
-interface SourceTerms { terms: { version: string; sources: { name: string; url: string; note: string }[] }; accepted: boolean }
-
 function CreateLeague({ onBack }: { onBack: () => void }) {
-  const t = useQuery({ queryKey: ["source-terms"], queryFn: () => api<SourceTerms>("/setup/terms") });
-  const [setupCode, setSetupCode] = useState("");
+  const navigate = useNavigate();
   const [name, setName] = useState("");
-  const [accept, setAccept] = useState(false);
+  const [terms, setTerms] = useState(appTermsAccepted());
   const [error, setError] = useState<unknown>(null);
   const [codes, setCodes] = useState<{ leagueCode: string; adminCode: string } | null>(null);
-  const needsTerms = !t.data?.accepted;
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
+    if (!terms) return;
+    acceptAppTerms();
     setError(null);
-    try {
-      setCodes(await api<{ leagueCode: string; adminCode: string }>("/setup/league", { method: "POST", body: { setupCode, name, acceptSourcesTerms: accept } }));
-    } catch (err) { setError(err); }
+    try { setCodes(await createLeague(name.trim())); } catch (err) { setError(err); }
   }
 
   if (codes) {
@@ -168,11 +188,11 @@ function CreateLeague({ onBack }: { onBack: () => void }) {
       <Card title="Lega creata">
         <p className="mb-3 text-sm">Salva questi codici: vengono mostrati <b>una sola volta</b>.</p>
         <dl className="mb-4 grid grid-cols-[auto_1fr] gap-x-3 gap-y-2 text-sm">
-          <dt className="text-muted">Codice lega</dt><dd className="font-mono font-bold tracking-widest">{codes.leagueCode}</dd>
+          <dt className="text-muted">Codice invito</dt><dd className="font-mono font-bold tracking-widest">{codes.leagueCode}</dd>
           <dt className="text-muted">Codice admin</dt><dd className="font-mono font-bold tracking-widest">{codes.adminCode}</dd>
         </dl>
-        <p className="mb-4 text-xs text-muted">Il codice lega lo condividi con i partecipanti. Il codice admin serve a te per importare rose e calendario: senza quei file la lega non è utilizzabile.</p>
-        <Button className="w-full" onClick={onBack}>Ho salvato i codici</Button>
+        <p className="mb-4 text-xs text-muted">Il codice invito lo condividi con i partecipanti. Il codice admin serve a te (o a un altro admin) per gestire la lega da un altro dispositivo. Ora importa rose, calendario e regolamento: senza rose e calendario la lega non è utilizzabile dagli altri.</p>
+        <Button variant="card" className="w-full" onClick={() => navigate("/admin", { replace: true })}>Vai alla gestione della lega</Button>
       </Card>
     );
   }
@@ -180,30 +200,12 @@ function CreateLeague({ onBack }: { onBack: () => void }) {
     <form onSubmit={submit} className="flex flex-col gap-3">
       <label className="flex flex-col gap-1 text-sm">
         <span className="font-semibold">Nome della lega</span>
-        <input className="rounded-xl border border-line bg-surface px-3 py-3 outline-none focus:border-accent" value={name} onChange={(e) => setName(e.target.value)} required />
+        <input className="rounded-xl border border-line bg-surface px-3 py-3 outline-none focus:border-accent" maxLength={60} value={name} onChange={(e) => setName(e.target.value)} required />
       </label>
-      <label className="flex flex-col gap-1 text-sm">
-        <span className="font-semibold">Codice di setup dell'installazione</span>
-        <input className="rounded-xl border border-line bg-surface px-3 py-3 outline-none focus:border-accent" value={setupCode} onChange={(e) => setSetupCode(e.target.value)} autoComplete="off" required />
-      </label>
-      {needsTerms && t.data && (
-        <div className="rounded-xl border border-line bg-surface p-3 text-xs">
-          <p className="mb-2 font-semibold">Termini delle fonti dati</p>
-          <p className="mb-2 text-muted">Chi gestisce l'installazione è titolare degli account delle fonti e ne accetta i termini d'uso. Finché non li accetti, FootballLite non scarica dati.</p>
-          <ul className="mb-2 flex flex-col gap-1">
-            {t.data.terms.sources.map((src) => (
-              <li key={src.name}><a href={src.url} target="_blank" rel="noreferrer" className="font-semibold text-accent underline">{src.name}</a>: {src.note}</li>
-            ))}
-          </ul>
-          <label className="flex items-start gap-2">
-            <input type="checkbox" className="mt-0.5 size-4 accent-[var(--color-accent)]" checked={accept} onChange={(e) => setAccept(e.target.checked)} required />
-            <span>Ho letto e accetto i termini d'uso di queste fonti e ho almeno 16 anni.</span>
-          </label>
-        </div>
-      )}
+      <AppTerms checked={terms} onChange={setTerms} />
       {!!error && <ErrorBox error={error} />}
-      <Button type="submit" className="mt-2 py-3" disabled={needsTerms && !accept}>Crea lega</Button>
-      <button type="button" className="text-xs text-muted underline" onClick={onBack}>Annulla</button>
+      <Button type="submit" variant="card" className="mt-2 py-3 text-base" disabled={!terms || !name.trim()}>Crea lega</Button>
+      <button type="button" className="text-xs text-muted underline" onClick={onBack}>Indietro</button>
     </form>
   );
 }
