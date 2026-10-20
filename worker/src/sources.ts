@@ -42,7 +42,9 @@ async function useQuota(env: Env, source: string, limit: number): Promise<void> 
 
 export async function bsdGet<T = any>(env: Env, path: string): Promise<T> {
   await useQuota(env, "bsd", BSD_DAILY_BUDGET);
-  const res = await fetch(BSD + path, { headers: { Authorization: `Token ${env.BSD_TOKEN}`, Accept: "application/json" } });
+  // Il token incollato può contenere spazi o già il prefisso "Token": si usa solo la chiave.
+  const key = (env.BSD_TOKEN ?? "").trim().replace(/^Token\s+/i, "");
+  const res = await fetch(BSD + path, { headers: { Authorization: `Token ${key}`, Accept: "application/json" } });
   const body: any = await res.json().catch(() => null);
   if (!res.ok) throw new SourceError("BSD", res.status, body?.detail ?? `HTTP ${res.status}`);
   return body as T;
