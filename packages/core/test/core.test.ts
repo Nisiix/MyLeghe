@@ -110,6 +110,24 @@ describe("abbinamento nomi", () => {
     expect(matchPlayer("Skorupski", 1, pool4).id).toBe(52);
   });
 
+  it("abbina apostrofi, ı turca e diminutivi nei nomi composti (Ndicka, Yildiz, Nico Paz)", () => {
+    const pool5 = [
+      { id: 60, name: "Evan N'Dicka", role: 2 as const },
+      { id: 61, name: "Kenan Yıldız", role: 4 as const },
+      { id: 62, name: "Nicolás Paz", role: 3 as const },
+      { id: 63, name: "Nicolò Barella", role: 3 as const },
+      { id: 64, name: "Pedro Rodríguez", role: 4 as const },
+    ];
+    expect(matchPlayer("Ndicka", 2, pool5).id).toBe(60);
+    expect(matchPlayer("N'Dicka", 2, pool5).id).toBe(60);
+    expect(matchPlayer("N’Dicka", 2, pool5).id).toBe(60);
+    expect(matchPlayer("Yildiz", 4, pool5).id).toBe(61);
+    expect(matchPlayer("Nico Paz", 3, pool5).id).toBe(62);
+    expect(matchPlayer("Nicolas Paz", 3, pool5).id).toBe(62);
+    // Il diminutivo vale solo nei nomi composti: "Nico" da solo non prende Nicolò Barella.
+    expect(matchPlayer("Nico", 3, pool5).id).toBeNull();
+  });
+
   it("il nome breve dello stesso giocatore non crea ambiguità", () => {
     const pool3 = [
       { id: 40, name: "Guglielmo Vicario", role: 1 as const }, { id: 40, name: "G. Vicario", role: 1 as const },

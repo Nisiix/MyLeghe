@@ -31,8 +31,10 @@ export function normalizeName(s: string): string {
     .normalize("NFD")
     .replace(/[̀-ͯ]/g, "")
     .toLowerCase()
+    .replace(/[\u2019\u2018`\u00b4]/g, "'")
     .replace(/[^a-z?\s.'-]/g, " ")
-    .replace(/['-]/g, " ")
+    .replace(/'/g, "") // N'Dicka e Ndicka sono lo stesso cognome
+    .replace(/-/g, " ")
     .replace(/\s+/g, " ")
     .trim();
 }
@@ -42,6 +44,12 @@ function sameWord(a: string, b: string): boolean {
   if (a.length !== b.length) return false;
   for (let i = 0; i < a.length; i++) if (a[i] !== WILD && b[i] !== WILD && a[i] !== b[i]) return false;
   return true;
+}
+
+/** Una parola è l'inizio dell'altra (almeno 3 lettere): "nico" / "nicolas". */
+function prefixWord(a: string, b: string): boolean {
+  const [short, long] = a.length <= b.length ? [a, b] : [b, a];
+  return short.length >= 3 && short.length < long.length && sameWord(short, long.slice(0, short.length));
 }
 
 interface ParsedRosterName {
@@ -66,14 +74,20 @@ export function scoreCandidate(rosterName: string, candidate: CandidatePlayer, r
   const words = normalizeName(candidate.name).replace(/\./g, " ").split(" ").filter(Boolean);
   if (!surname.length || !words.length) return 0;
 
-  // Tutte le parole del cognome devono comparire nel nome del candidato.
+  // Tutte le parole del cognome devono comparire nel nome del candidato. In un nome composto una parola
+  // può essere un diminutivo o una forma abbreviata dell'altra ("Nico Paz" / "Nicolás Paz"): vale con una piccola penalità.
   const used = new Set<number>();
+  let partial = 0;
   for (const s of surname) {
-    const idx = words.findIndex((w, i) => !used.has(i) && sameWord(s, w));
+    let idx = words.findIndex((w, i) => !used.has(i) && sameWord(s, w));
+    if (idx < 0 && surname.length > 1) {
+      idx = words.findIndex((w, i) => !used.has(i) && prefixWord(s, w));
+      if (idx >= 0) partial++;
+    }
     if (idx < 0) return 0;
     used.add(idx);
   }
-  let score = 0.6 + 0.1 * Math.min(surname.length, 2);
+  let score = 0.6 + 0.1 * Math.min(surname.length, 2) - 0.05 * partial;
 
   // Iniziali: devono corrispondere all'inizio delle altre parole (es. "Se." → Sebastiano).
   const others = words.filter((_, i) => !used.has(i));
