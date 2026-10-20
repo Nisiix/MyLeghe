@@ -252,8 +252,8 @@ async function syncSteps(env: Env, budget: Budget): Promise<void> {
   const round = await activeRound(env);
   const playing = round.matches.some((m) => m.kickoff <= now && now - m.kickoff < 2.5 * HOUR && !["FINISHED", "AWARDED"].includes(m.status));
   if (await due(env, "sync:fdMatches", playing ? LIVE_EVERY : 30 * MIN)) {
-    const info = round;
-    await refreshMatchday(env, info.matchday);
+    await refreshMatchday(env, round.matchday);
+    if (round.lineupMatchday !== round.matchday) await refreshMatchday(env, round.lineupMatchday);
     await kvSet(env, "sync:fdMatches", now);
   }
   if (await due(env, "sync:fdStandings", 6 * HOUR)) { await refreshStandings(env); await kvSet(env, "sync:fdStandings", now); }
@@ -262,11 +262,14 @@ async function syncSteps(env: Env, budget: Budget): Promise<void> {
   if ((await kvRead<string>(env, "bsd:playersDay"))?.value !== day) await syncPlayers(env, budget);
 
   const info = await activeRound(env);
+  // Giornate da seguire: quella attiva e, se è conclusa, anche quella della formazione da inserire.
+  const rounds = info.lineupMatchday !== info.matchday ? [info.matchday, info.lineupMatchday] : [info.matchday];
   if (await due(env, "sync:map", 3 * HOUR) || info.matches.some((m) => !m.ext_event_id)) {
-    await mapRoundEvents(env, info.matchday, budget);
+    for (const md of rounds) await mapRoundEvents(env, md, budget);
     await kvSet(env, "sync:map", now);
   }
-  const matches = await matchesOf(env, info.matchday);
+  const matches: SaMatch[] = [];
+  for (const md of rounds) matches.push(...(await matchesOf(env, md)));
 
   for (const m of matches) {
     if (budget.left <= 0) break;

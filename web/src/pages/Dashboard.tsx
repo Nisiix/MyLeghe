@@ -34,10 +34,12 @@ function RoundCard({ round }: { round: Round }) {
   const s = useSession();
   const league = useLeague();
   const calendar = useCalendar();
-  const lineups = useLineups(round.matchday);
+  // La formazione da inserire è quella della giornata successiva quando quella in evidenza è conclusa.
+  const lineups = useLineups(round.lineupMatchday);
   const now = useNow();
   const teams = new Map(league.data!.teams.map((t) => [t.id, t.name]));
   const mine = myMatch(calendar.data, round.matchday, s?.myTeamId);
+  const next = round.lineupMatchday !== round.matchday ? myMatch(calendar.data, round.lineupMatchday, s?.myTeamId) : null;
   const myLineup = lineups.data?.lineups.find((l) => l.team_id === s?.myTeamId);
   const started = round.phase !== "upcoming";
 
@@ -59,7 +61,16 @@ function RoundCard({ round }: { round: Round }) {
           {round.phase === "live" ? (
             <div className="flex items-center gap-2 text-lg font-semibold"><span className="size-2.5 animate-pulse rounded-full bg-danger" />Giornata in corso</div>
           ) : round.phase === "finished" ? (
-            <div className="text-lg font-semibold">Giornata conclusa</div>
+            <>
+              <div className="text-lg font-semibold">Giornata conclusa</div>
+              {round.lineupMatchday !== round.matchday && (
+                <div className="mt-2 rounded-xl bg-white/10 p-3">
+                  <div className="text-xs text-chalk/70">Prossima: {round.lineupMatchday}ª giornata{next ? ` · ${teams.get(next.home_team_id)} – ${teams.get(next.away_team_id)}` : ""}</div>
+                  {round.lineupDeadline > 0 && <div className="scoreboard tabular text-2xl leading-none">{formatCountdown(round.lineupDeadline - now)}</div>}
+                  {round.lineupDeadline > 0 && <div className="mt-1 text-[11px] text-chalk/70">consegna entro {new Date(round.lineupDeadline).toLocaleString("it-IT", { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}</div>}
+                </div>
+              )}
+            </>
           ) : round.deadline ? (
             <>
               <div className="text-xs text-chalk/70">Primo calcio d'inizio tra</div>
@@ -69,7 +80,7 @@ function RoundCard({ round }: { round: Round }) {
           ) : null}
           {s?.myTeamId ? (
             <div className="mt-3 text-xs font-semibold">
-              {lineups.isLoading ? "Verifica…" : myLineup ? `✓ Formazione inserita${myLineup.forced ? " · modificata a giornata iniziata" : ""}` : "Formazione non ancora inserita"}
+              {lineups.isLoading ? "Verifica…" : myLineup ? `✓ Formazione inserita${round.lineupMatchday !== round.matchday ? ` per la ${round.lineupMatchday}ª` : ""}${myLineup.forced ? " · modificata a giornata iniziata" : ""}` : `Formazione${round.lineupMatchday !== round.matchday ? ` della ${round.lineupMatchday}ª` : ""} non ancora inserita`}
             </div>
           ) : (
             <p className="mt-3 text-xs text-chalk/80">Scegli il tuo utente nelle <Link to="/utente" className="underline">impostazioni utente</Link> per schierare.</p>

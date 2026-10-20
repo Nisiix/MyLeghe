@@ -74,20 +74,21 @@ export async function runNotifications(env: Env): Promise<void> {
     try {
       const prefs: NotifyPrefs = { ...DEFAULT_NOTIFY, ...JSON.parse(r.prefs) };
       let state: NotifyState = JSON.parse(r.state || "{}");
-      if (state.round !== info.matchday) state = { round: info.matchday };
+      if (state.round !== info.lineupMatchday) state = { round: info.lineupMatchday };
       const device = { id: r.device_id, endpoint: r.endpoint, p256dh: r.p256dh, auth: r.auth };
 
+      // Promemoria e titolari a rischio riguardano la giornata della formazione (la successiva, se quella attiva è conclusa).
       const lineup = await env.DB.prepare("SELECT starters FROM lineups WHERE team_id = ? AND round = ? ORDER BY id DESC LIMIT 1")
-        .bind(r.team_id, info.matchday).first<{ starters: string }>();
-      if (info.phase !== "upcoming") {
+        .bind(r.team_id, info.lineupMatchday).first<{ starters: string }>();
+      if (info.phase === "live") {
         await liveEventAlerts(env, r, prefs, state, info.matchday, device);
       } else if (!lineup) {
-        const h = dueReminder(info.deadline, now, prefs.reminderHours, state.lastReminder ?? null);
+        const h = dueReminder(info.lineupDeadline, now, prefs.reminderHours, state.lastReminder ?? null);
         if (h !== null) {
-          await sendPush(env, device, { title: `${r.team_name}: formazione mancante`, body: `Giornata ${info.matchday}: mancano meno di ${h} ${h === 1 ? "ora" : "ore"} al primo calcio d'inizio.`, url: "/", tag: `rem-${r.league_id}` });
+          await sendPush(env, device, { title: `${r.team_name}: formazione mancante`, body: `Giornata ${info.lineupMatchday}: mancano meno di ${h} ${h === 1 ? "ora" : "ore"} al primo calcio d'inizio.`, url: "/", tag: `rem-${r.league_id}` });
           state.lastReminder = h;
         }
-      } else if (prefs.starterAlerts && info.deadline - now < 48 * 3600_000) {
+      } else if (prefs.starterAlerts && info.lineupDeadline - now < 48 * 3600_000) {
         if (!outlooks.has(r.league_id)) outlooks.set(r.league_id, await computeOutlook(env, r.league_id));
         const out = outlooks.get(r.league_id)!;
         const slots: number[] = JSON.parse(lineup.starters);

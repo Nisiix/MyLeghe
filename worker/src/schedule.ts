@@ -19,7 +19,7 @@ export interface SaMatch {
   ext_event_id: number | null;
 }
 
-export interface RoundInfo {
+export interface RoundBase {
   matchday: number;
   /** Primo calcio d'inizio: scadenza per inserire la formazione senza "modifica forzata". */
   deadline: number;
@@ -28,6 +28,24 @@ export interface RoundInfo {
   phase: "upcoming" | "live" | "finished";
   matches: SaMatch[];
 }
+
+export interface RoundInfo extends RoundBase {
+  /** Giornata della formazione da inserire: la stessa, oppure la successiva quando questa è conclusa. */
+  lineupMatchday: number;
+  lineupDeadline: number;
+}
+
+/** Inizio del giorno (ora italiana) che contiene l'istante `t`. */
+function romeDayStart(t: number): number {
+  const parts = Object.fromEntries(
+    new Intl.DateTimeFormat("en-US", { timeZone: "Europe/Rome", hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false }).formatToParts(new Date(t)).map((p) => [p.type, p.value]),
+  );
+  const secs = (Number(parts.hour) % 24) * 3600 + Number(parts.minute) * 60 + Number(parts.second);
+  return t - secs * 1000 - (t % 1000);
+}
+
+/** La giornata conclusa resta quella in evidenza (finale) fino a tutto il giorno successivo all'ultima partita. */
+export const keepUntil = (end: number) => romeDayStart(end) + 2 * 24 * 3600_000;
 
 const FINISHED = new Set(["FINISHED", "AWARDED"]);
 const LIVE = new Set(["IN_PLAY", "PAUSED", "LIVE"]);
@@ -78,7 +96,7 @@ export async function matchesOf(env: Env, matchday: number): Promise<SaMatch[]> 
   return rows.results ?? [];
 }
 
-function roundInfo(matchday: number, matches: SaMatch[], now: number): RoundInfo {
+function roundInfo(matchday: number, matches: SaMatch[], now: number): RoundBase {
   const kickoffs = matches.map((m) => m.kickoff);
   const deadline = kickoffs.length ? Math.min(...kickoffs) : 0;
   const end = kickoffs.length ? Math.max(...kickoffs) + 2 * 3600_000 : 0;
@@ -89,22 +107,39 @@ function roundInfo(matchday: number, matches: SaMatch[], now: number): RoundInfo
 }
 
 /**
- * Giornata "attiva" per la lega: quella in corso oppure la prossima da giocare.
- * Se la giornata corrente è conclusa si passa alla successiva.
+ * Giornata "attiva" per la lega: quella in corso, la prossima da giocare, oppure quella appena conclusa
+ * finché resta in evidenza (fino a tutto il giorno successivo all'ultima partita). A giornata conclusa la
+ * formazione da inserire è già quella della giornata successiva (`lineupMatchday`).
  */
 export async function activeRound(env: Env): Promise<RoundInfo> {
   const now = Date.now();
+  const load = async (md: number) => {
+    let m = await matchesOf(env, md);
+    if (!m.length) { await refreshMatchday(env, md); m = await matchesOf(env, md); }
+    return m;
+  };
   let md = await currentMatchday(env);
-  let matches = await matchesOf(env, md);
-  if (!matches.length) { await refreshMatchday(env, md); matches = await matchesOf(env, md); }
-  let info = roundInfo(md, matches, now);
-  if (info.phase === "finished" && md < 38) {
-    md += 1;
-    matches = await matchesOf(env, md);
-    if (!matches.length) { await refreshMatchday(env, md); matches = await matchesOf(env, md); }
-    info = roundInfo(md, matches, now);
+  let info: RoundBase | null = null;
+  // La fonte può essere già passata alla giornata successiva: quella appena conclusa resta in evidenza.
+  if (md > 1) {
+    const prev = await matchesOf(env, md - 1);
+    if (prev.length) {
+      const pi = roundInfo(md - 1, prev, now);
+      if (pi.phase === "finished" && now < keepUntil(pi.end)) info = pi;
+    }
   }
-  return info;
+  if (!info) {
+    info = roundInfo(md, await load(md), now);
+    if (info.phase === "finished" && md < 38 && now >= keepUntil(info.end)) {
+      md += 1;
+      info = roundInfo(md, await load(md), now);
+    }
+  }
+  if (info.phase === "finished" && info.matchday < 38) {
+    const next = roundInfo(info.matchday + 1, await load(info.matchday + 1), now);
+    return { ...info, lineupMatchday: next.matchday, lineupDeadline: next.deadline };
+  }
+  return { ...info, lineupMatchday: info.matchday, lineupDeadline: info.deadline };
 }
 
 export interface SaStanding { team_id: number; name: string; tla: string | null; position: number; points: number; played: number }

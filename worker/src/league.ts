@@ -418,8 +418,9 @@ league.put("/league/lineups/:round/:teamId", async (c) => {
   const body = await c.req.json<{ module: string; starters: number[]; bench: number[]; captain?: number | null; vice?: number | null; forced?: boolean }>();
   const cfg = await loadConfig(c.env.DB, s.lid);
   const info = await activeRound(c.env);
-  if (round !== info.matchday) return c.json({ error: `Si può schierare solo la giornata ${info.matchday}.` }, 400);
-  const started = info.phase !== "upcoming";
+  if (round !== info.lineupMatchday) return c.json({ error: `Si può schierare solo la giornata ${info.lineupMatchday}.` }, 400);
+  // La giornata successiva a una conclusa non è ancora iniziata.
+  const started = round === info.matchday && info.phase !== "upcoming";
   const team = await c.env.DB.prepare("SELECT 1 FROM teams WHERE id = ? AND league_id = ?").bind(teamId, s.lid).first();
   if (!team) return c.json({ error: "Utente non trovato" }, 404);
   let enteredBy: number | null = null;

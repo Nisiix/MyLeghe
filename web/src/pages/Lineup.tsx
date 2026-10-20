@@ -15,9 +15,10 @@ export function LineupPage() {
   const league = useLeague();
   const round = useRound();
   const outlook = useOutlook();
-  const lineups = useLineups(round.data?.matchday);
+  // La formazione si inserisce per la giornata della formazione (la successiva, se quella attiva è conclusa).
+  const lineups = useLineups(round.data?.lineupMatchday);
   // Senza formazione per la giornata si riparte dall'ultima inserita (giornata precedente), come nelle app di lega.
-  const prevRound = round.data && round.data.matchday > 1 ? round.data.matchday - 1 : undefined;
+  const prevRound = round.data && round.data.lineupMatchday > 1 ? round.data.lineupMatchday - 1 : undefined;
   const previous = useLineups(prevRound);
   const [params] = useSearchParams();
   // Dopo il salvataggio l'editor si ricarica con la formazione salvata: la conferma resta visibile.
@@ -26,7 +27,7 @@ export function LineupPage() {
   if (league.isLoading || round.isLoading || outlook.isLoading || lineups.isLoading || (prevRound && previous.isLoading)) return <Spinner label="Carico la tua rosa…" />;
   if (league.error || round.error) return <ErrorBox error={league.error ?? round.error} />;
   if (!s?.myTeamId) return <Card title="Formazione"><Empty>Collega la tua rosa al profilo dalle <Link to="/utente" className="underline">impostazioni utente</Link>.</Empty></Card>;
-  const started = round.data!.phase !== "upcoming";
+  const started = round.data!.lineupMatchday === round.data!.matchday && round.data!.phase !== "upcoming";
   // Inserimento per conto di un altro utente: solo a giornata iniziata e se lui non ha inserito la sua.
   const target = Number(params.get("squadra")) || s.myTeamId;
   const proxyFor = target !== s.myTeamId ? league.data!.teams.find((t) => t.id === target) : undefined;
@@ -41,7 +42,8 @@ export function LineupPage() {
   const unmatched = roster.filter((p) => !p.ext_id).length;
   const last = current ? undefined : previous.data?.lineups.find((l) => l.team_id === target && !l.hidden && Array.isArray(l.starters));
   return (
-    <Editor key={`${target}-${current?.id ?? "new"}`} teamId={target} proxyName={proxyFor?.name} round={round.data!.matchday} deadline={round.data!.deadline} started={started}
+    <Editor key={`${target}-${current?.id ?? "new"}`} teamId={target} proxyName={proxyFor?.name} round={round.data!.lineupMatchday} deadline={round.data!.lineupDeadline} started={started}
+      liveLabel={round.data!.phase === "upcoming" ? "Altre formazioni" : "Live"}
       scored={scored} cfg={cfg} current={current} last={last} unmatched={unmatched} admin={!!s.admin} savedMessage={saved} onSaved={setSaved} />
   );
 }
@@ -63,8 +65,8 @@ const SINGULAR: Record<number, string> = { 1: "portiere", 2: "difensore", 3: "ce
  * possibili (titolare, panchina, riserve: quelle diverse da dove si trova); un giocatore si può anche trascinare sul
  * posto di un altro (scambio), su uno slot libero o in panchina.
  */
-function Editor({ teamId, proxyName, round, deadline, started, scored, cfg, current, last, unmatched, admin, savedMessage, onSaved }: {
-  teamId: number; proxyName?: string; round: number; deadline: number; started: boolean; scored: Row[]; cfg: LeagueConfig; current?: Lineup; last?: Lineup; unmatched: number; admin: boolean;
+function Editor({ teamId, proxyName, round, deadline, started, liveLabel, scored, cfg, current, last, unmatched, admin, savedMessage, onSaved }: {
+  teamId: number; proxyName?: string; round: number; deadline: number; started: boolean; liveLabel: string; scored: Row[]; cfg: LeagueConfig; current?: Lineup; last?: Lineup; unmatched: number; admin: boolean;
   savedMessage: string | null; onSaved: (text: string | null) => void;
 }) {
   const qc = useQueryClient();
@@ -531,7 +533,7 @@ function Editor({ teamId, proxyName, round, deadline, started, scored, cfg, curr
         </div>
         <div className="mt-3 flex gap-2">
           <Link to="/live" className="flex flex-1 items-center justify-center gap-1.5 rounded-full border border-white/50 px-2 py-2 text-sm font-bold hover:bg-white/10">
-            {started && <span className="size-2 animate-pulse rounded-full bg-danger" aria-hidden />}{started ? "Live" : "Altre formazioni"}
+            {liveLabel === "Live" && <span className="size-2 animate-pulse rounded-full bg-danger" aria-hidden />}{liveLabel}
           </Link>
           <button onClick={() => { setPasting(true); setPasteError(null); }} className="flex-1 rounded-full border border-white/50 px-2 py-2 text-sm font-bold hover:bg-white/10">Importa rosa</button>
           <button type="button" aria-pressed={!!suggested} onClick={toggleSuggestion}

@@ -31,7 +31,11 @@ export interface SaMatch {
   home_name: string; away_name: string; home_tla: string | null; away_tla: string | null;
   score_home: number | null; score_away: number | null;
 }
-export interface Round { matchday: number; deadline: number; end: number; phase: "upcoming" | "live" | "finished"; matches: SaMatch[]; now: number }
+export interface Round {
+  matchday: number; deadline: number; end: number; phase: "upcoming" | "live" | "finished"; matches: SaMatch[]; now: number;
+  /** Giornata della formazione da inserire: la stessa, o la successiva quando quella attiva è conclusa. */
+  lineupMatchday: number; lineupDeadline: number;
+}
 
 export function useRound() {
   const s = useSession();

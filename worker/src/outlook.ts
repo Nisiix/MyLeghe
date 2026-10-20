@@ -5,7 +5,7 @@ import { Hono } from "hono";
 import { requireSession, type AppEnv } from "./auth";
 import type { Env } from "./env";
 import { loadConfig } from "./league";
-import { activeRound, kvRead, opponentFactor, standings, type SaMatch } from "./schedule";
+import { activeRound, kvRead, matchesOf, opponentFactor, standings, type SaMatch } from "./schedule";
 import { HISTORY_ROUNDS } from "./sync";
 
 export const outlook = new Hono<AppEnv>();
@@ -56,7 +56,9 @@ export interface PlayerOutlookOut {
 /** Per ogni giocatore abbinato delle rose della lega: titolarità stimata e informazioni sulla prossima partita. */
 export async function computeOutlook(env: Env, leagueId: string): Promise<{ matchday: number; players: Record<number, PlayerOutlookOut> }> {
   const cfg: LeagueConfig = await loadConfig(env.DB, leagueId);
-  const info = await activeRound(env);
+  const active = await activeRound(env);
+  // Titolarità e prossima partita per la giornata della formazione da inserire (la successiva, se quella attiva è conclusa).
+  const info = { matchday: active.lineupMatchday, matches: active.lineupMatchday === active.matchday ? active.matches : await matchesOf(env, active.lineupMatchday) };
   const roster = await env.DB.prepare(
     `SELECT DISTINCT r.ext_id, r.role, p.team_ext_id FROM roster r JOIN teams t ON t.id = r.team_id LEFT JOIN players p ON p.id = r.ext_id
      WHERE t.league_id = ? AND r.ext_id IS NOT NULL`,
