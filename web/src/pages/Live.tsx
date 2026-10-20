@@ -39,6 +39,12 @@ export function LivePage() {
   return (
     <div className="flex flex-col gap-4">
       <Scoreboard match={match} names={names} calc={current} simulate={simulate} phase={round.data!.phase} />
+      {match.home_goals !== null && (
+        <section className="rounded-xl border border-accent/40 bg-accent/10 p-3 text-sm">
+          <b>Risultato ufficiale: {match.home_goals}-{match.away_goals}</b> ({fmt(match.home_points)} – {fmt(match.away_points)}), dal calendario importato
+          {calendar.importedAt ? ` il ${new Date(calendar.importedAt).toLocaleString("it-IT", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}` : ""}. Il tabellone sopra resta la stima di FootballLite.
+        </section>
+      )}
 
       {!simulate ? (
         <section className="rounded-xl border border-line bg-surface p-4 text-center">
@@ -80,7 +86,7 @@ export function LivePage() {
             );
           })}
         </ul>
-        <p className="mt-2 text-[11px] text-muted">{simulate ? "Risultati simulati." : "Punteggi parziali con i voti già arrivati."} Voti stimati da FootballLite su statistiche BSD: non sono i voti ufficiali.</p>
+        <p className="mt-2 text-[11px] text-muted">{simulate ? "Risultati simulati." : "Punteggi parziali con i voti già arrivati."} Voti stimati da FootballLite su statistiche BSD: non sono i voti ufficiali. I risultati ufficiali compaiono quando l'admin reimporta il calendario da Leghe Fantacalcio{calendar.importedAt ? ` (ultimo import: ${new Date(calendar.importedAt).toLocaleString("it-IT", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })})` : ""}.</p>
       </Card>
 
       {editing && (

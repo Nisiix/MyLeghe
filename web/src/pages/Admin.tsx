@@ -124,8 +124,8 @@ function CalendarImportCard() {
   async function upload() {
     if (!preview) return;
     try {
-      const r = await api<{ days: number; matches: number }>("/league/admin/calendar", { method: "POST", body: { days: preview.days } });
-      setDone(`Calendario importato: ${r.days} giornate, ${r.matches} partite.`);
+      const r = await api<{ days: number; matches: number; officialMatches: number }>("/league/admin/calendar", { method: "POST", body: { days: preview.days } });
+      setDone(`Calendario importato: ${r.days} giornate, ${r.matches} partite, ${r.officialMatches} risultati ufficiali.`);
       setPreview(null);
       await qc.invalidateQueries({ queryKey: ["calendar"] });
     } catch (e) { setError(e); }
@@ -133,7 +133,7 @@ function CalendarImportCard() {
 
   return (
     <Card title="Calendario">
-      <p className="mb-3 text-sm text-muted">File del calendario esportato da Leghe Fantacalcio. Definisce gli avversari di ogni giornata; i risultati già presenti nel file vengono mostrati nella dashboard. Importa prima le rose.</p>
+      <p className="mb-3 text-sm text-muted">File del calendario esportato da Leghe Fantacalcio. Definisce gli avversari di ogni giornata e porta i <b>risultati ufficiali</b> delle giornate calcolate: reimportalo dopo ogni giornata per aggiornarli (l'app mostra l'ora dell'ultimo import). Importa prima le rose.</p>
       <FileField label="Scegli il file del calendario" onFile={load} />
       {!!error && <div className="mt-3"><ErrorBox error={error} /></div>}
       {preview && (

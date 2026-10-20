@@ -3,7 +3,7 @@
 import { matchPlayer, normalizeConfig, validateLineup, type CalendarDay, type CandidatePlayer, type ImportedTeam, type LeagueConfig, type Role } from "@footballlite/core";
 import { Hono } from "hono";
 import { newCode, normalizeCode, requireAdmin, requireSession, sha256, signSession, type AppEnv } from "./auth";
-import { kvSet } from "./schedule";
+import { kvRead, kvSet } from "./schedule";
 import { SOURCE_TERMS, sourcesAccepted } from "./terms";
 import { activeRound } from "./schedule";
 
@@ -338,7 +338,10 @@ league.post("/league/admin/calendar", async (c) => {
   }
   if (missing.size) return c.json({ error: `Squadre non presenti nelle rose importate: ${[...missing].join(", ")}. Importa prima le rose.` }, 400);
   for (let i = 0; i < stmts.length; i += 50) await c.env.DB.batch(stmts.slice(i, i + 50));
-  return c.json({ days: days.length, matches: stmts.length - 1 });
+  // Ora dell'import: i risultati ufficiali presenti nel file sono aggiornati a questo momento.
+  const official = days.reduce((n, d) => n + d.matches.filter((m) => m.homeGoals !== null).length, 0);
+  await kvSet(c.env, `calendar:${s.lid}`, { importedAt: Date.now(), officialMatches: official });
+  return c.json({ days: days.length, matches: stmts.length - 1, officialMatches: official });
 });
 
 export interface CalendarRow {
@@ -349,7 +352,8 @@ export interface CalendarRow {
 league.get("/league/calendar", async (c) => {
   const s = c.get("session");
   const rows = await c.env.DB.prepare("SELECT league_day, serie_a_day, home_team_id, away_team_id, home_points, away_points, home_goals, away_goals FROM league_calendar WHERE league_id = ? ORDER BY league_day, rowid").bind(s.lid).all<CalendarRow>();
-  return c.json(rows.results ?? []);
+  const meta = await kvRead<{ importedAt: number; officialMatches: number }>(c.env, `calendar:${s.lid}`);
+  return c.json({ rows: rows.results ?? [], importedAt: meta?.value.importedAt ?? null });
 });
 
 /** Avversario di una squadra nella giornata di Serie A indicata, dal calendario importato. */

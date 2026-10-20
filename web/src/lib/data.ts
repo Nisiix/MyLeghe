@@ -95,7 +95,14 @@ export interface CalendarRow {
   home_points: number | null; away_points: number | null; home_goals: number | null; away_goals: number | null;
 }
 
+/** Calendario della lega importato dall'admin; `importedAt` = ora dell'ultimo import (risultati ufficiali inclusi). */
 export function useCalendar() {
   const s = useSession();
-  return useQuery({ queryKey: ["calendar", s?.league.id], enabled: !!s, queryFn: () => api<CalendarRow[]>("/league/calendar"), staleTime: 30 * MIN });
+  const q = useQuery({
+    queryKey: ["calendar", s?.league.id],
+    enabled: !!s,
+    queryFn: () => api<{ rows: CalendarRow[]; importedAt: number | null }>("/league/calendar"),
+    staleTime: 5 * MIN,
+  });
+  return { ...q, data: q.data?.rows, importedAt: q.data?.importedAt ?? null };
 }

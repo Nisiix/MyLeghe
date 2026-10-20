@@ -123,6 +123,7 @@ function LeagueDayCard({ round }: { round: Round }) {
           );
         })}
       </ul>
+      {calendar.importedAt && <p className="mt-2 text-[11px] text-muted">Risultati ufficiali aggiornati all'import del calendario del {new Date(calendar.importedAt).toLocaleString("it-IT", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}.</p>}
       {round.phase !== "upcoming" && <Link to="/live" className="mt-2 block text-center text-xs text-accent">Punteggi live e «Simula risultato»</Link>}
     </Card>
   );
