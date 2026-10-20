@@ -4,9 +4,9 @@ App (PWA, anche come APK Android) per seguire la propria lega di fantacalcio. Ro
 
 **Landing page e APK:** [nisiix.github.io/MyLeghe](https://nisiix.github.io/MyLeghe)
 
-- **Accesso senza account.** Si entra con il codice invito della lega e si sceglie il proprio utente. Sullo stesso dispositivo si possono avere più leghe; chi crea una lega ne diventa admin.
+- **Accesso.** Si entra con il codice invito della lega e si sceglie il proprio utente, che ha un profilo con username e password (creato al primo accesso). L'accesso resta memorizzato sul dispositivo dell'ultimo login: entrando da un altro dispositivo, sul precedente serve di nuovo la password. L'admin può azzerare il profilo di chi dimentica la password. Sullo stesso dispositivo si possono avere più leghe; chi crea una lega ne diventa admin e il nome della lega deve essere unico.
 - **Dashboard.** Tabellone della giornata con la tua partita (avversario dal calendario), il conto alla rovescia al primo calcio d'inizio e il pulsante «Inserisci formazione», che a giornata iniziata diventa «Visualizza live». Sotto: le partite della giornata di lega, i giocatori a rischio, le partite di Serie A.
-- **Formazione.** Campo con la **titolarità stimata** sotto ogni giocatore, **formazione consigliata** (modulo, undici, panchina, capitano) sui moduli ammessi dalla lega. A giornata iniziata è possibile una **modifica forzata**, segnalata a tutta la lega; chi non ha schierato può avere la formazione inserita da un altro utente («inserita da»).
+- **Formazione.** Campo con la **titolarità stimata** (arrotondata al 5%) sotto ogni giocatore, **formazione consigliata** (modulo, undici, panchina, capitano) sui moduli ammessi dalla lega. A giornata iniziata è possibile una **modifica forzata**, segnalata a tutta la lega; chi non ha schierato può avere la formazione inserita da un altro utente («inserita da»).
 - **Live e simulazione.** Punteggio parziale di tutte le partite della giornata di lega e **«Simula risultato»** come in Leghe Fantacalcio: chi deve giocare vale fantavoto 6, con «Modifica voti» per cambiare presenza, voto e bonus/malus. Si applicano sostituzioni, capitano e modificatori del regolamento.
 - **Risultati ufficiali.** Reimportando il calendario esportato dalla lega, l'app mostra i risultati ufficiali con l'ora dell'ultimo import.
 - **Regolamento completo**: soglie e regole dei gol, bonus/malus per ruolo, sostituzioni (per ruolo o libere), voto d'ufficio, capitano e vice, modificatori difesa/portiere/centrocampo/attacco, fair play, fattore campo, bonus per modulo, panchina per ruolo, regola per chi non schiera.
@@ -79,6 +79,7 @@ npm run dev:worker
 
 ## Pubblicazione
 
+- **Pulizia dei dati:** la migrazione `0009_users_reset.sql` svuota leghe, squadre, rose, formazioni, calendari e notifiche (i dati di Serie A restano). In seguito si può ripetere con `curl -X POST -H "x-setup-code: <SETUP_CODE>" https://<worker>/api/setup/reset`.
 - **Cloudflare (piano gratuito):** `npx wrangler login`; `npx wrangler d1 create footballlite` e copia il `database_id` in `worker/wrangler.toml`; imposta i segreti con `npx wrangler secret put NOME --name footballlite`; `npm run db:migrate -w worker` e `npm run deploy`.
 - **Landing (GitHub Pages):** Settings → Pages → Source «GitHub Actions»; il workflow `.github/workflows/pages.yml` pubblica la cartella `site/`.
 - **APK Android:** da `android/`, `npx @bubblewrap/cli build` con le variabili `BUBBLEWRAP_KEYSTORE_PASSWORD` e `BUBBLEWRAP_KEY_PASSWORD`. La chiave di firma non è nel repository; l'impronta SHA-256 è in `web/public/.well-known/assetlinks.json`.

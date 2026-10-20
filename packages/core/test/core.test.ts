@@ -98,6 +98,18 @@ describe("titolarità e formazione consigliata", () => {
     expect(starterProbability({ recentStarts: [true], predicted: "bench", confirmed: true })).toBe(5);
   });
 
+  it("arrotonda la titolarità al 5% più vicino", () => {
+    // 1 − 0,25 = 75% esatto; (0,35 + 0,25) / 0,78 ≈ 77% → 75; 0,35 / 0,78 ≈ 45% → 45.
+    expect(starterProbability({ recentStarts: [true, false, true, true, true] })).toBe(75);
+    expect(starterProbability({ recentStarts: [true, true, false] })).toBe(75);
+    expect(starterProbability({ recentStarts: [true, false, false] })).toBe(45);
+    // 0,7 + 0,25 × 0,35 / 0,78 ≈ 81% → 80.
+    expect(starterProbability({ recentStarts: [true, false, false], predicted: "starter" })).toBe(80);
+    for (const o of [{ recentStarts: [true, true, false, true] }, { recentStarts: [false, true], doubtful: true }]) {
+      expect(starterProbability(o) % 5).toBe(0);
+    }
+  });
+
   it("sceglie un modulo ammesso con 11 titolari validi", () => {
     const roster: RosterEntry[] = [
       ...[1, 2].map((i) => ({ id: `p${i}`, name: `P${i}`, role: 1 as const })),

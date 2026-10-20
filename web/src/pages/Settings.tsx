@@ -18,8 +18,9 @@ export function SettingsPage() {
       <h1 className="scoreboard text-3xl leading-none">Impostazioni</h1>
 
       <Card title="Il tuo utente">
-        <p className="mb-3 text-sm">{s?.myTeamId ? names.get(s.myTeamId) ?? "—" : "Nessun utente scelto: puoi solo guardare."}</p>
-        <Button variant="ghost" onClick={() => { session.update({ myTeamId: null }); navigate("/accesso"); }}>Cambia utente</Button>
+        <p className="mb-1 text-sm">{s?.myTeamId ? names.get(s.myTeamId) ?? "—" : "Nessun utente scelto: puoi solo guardare."}</p>
+        {s?.username && <p className="mb-3 text-xs text-muted">@{s.username} · l'accesso resta memorizzato su questo dispositivo fino al prossimo login da un altro dispositivo.</p>}
+        <Button variant="ghost" onClick={() => { session.leaveUser(); navigate("/accesso"); }}>Cambia utente</Button>
       </Card>
 
       {s?.myTeamId && <NotifyCard teamId={s.myTeamId} />}

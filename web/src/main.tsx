@@ -1,7 +1,7 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { StrictMode, type ReactNode } from "react";
 import { createRoot } from "react-dom/client";
-import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
+import { BrowserRouter, Navigate, Route, Routes, useLocation } from "react-router-dom";
 import { registerSW } from "virtual:pwa-register";
 import { Layout } from "./components/Layout";
 import { useSession } from "./lib/session";
@@ -17,17 +17,22 @@ registerSW({ immediate: true });
 
 const queryClient = new QueryClient({ defaultOptions: { queries: { retry: 1, refetchOnWindowFocus: true } } });
 
-/** Serve il codice della lega e la scelta dell'utente (l'admin può entrare anche senza utente, per l'import). */
+/**
+ * Serve il codice della lega e la scelta dell'utente (l'admin può entrare anche senza utente, per l'import).
+ * Con un avviso in sospeso (accesso fatto da un altro dispositivo) si torna alla scelta dell'utente.
+ */
 function Guard({ children }: { children: ReactNode }) {
   const s = useSession();
-  return s && (s.myTeamId || s.admin) ? <>{children}</> : <Navigate to="/accesso" replace />;
+  return s && (s.myTeamId || s.admin) && !s.notice ? <>{children}</> : <Navigate to="/accesso" replace />;
 }
 
 function App() {
   const s = useSession();
+  // Con ?utente la scelta dell'utente si apre anche se un utente è già collegato (es. dopo il salvataggio del regolamento).
+  const chooseUser = new URLSearchParams(useLocation().search).has("utente");
   return (
     <Routes>
-      <Route path="/accesso" element={s?.myTeamId ? <Navigate to="/" replace /> : <Access />} />
+      <Route path="/accesso" element={s?.myTeamId && !chooseUser ? <Navigate to="/" replace /> : <Access />} />
       <Route element={<Guard><Layout /></Guard>}>
         <Route index element={<Dashboard />} />
         <Route path="formazione" element={<LineupPage />} />
