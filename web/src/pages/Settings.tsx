@@ -2,7 +2,8 @@ import { DEFAULT_NOTIFY, type NotifyPrefs } from "@footballlite/core";
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Button, Card } from "../components/ui";
+import { Button, Card, ErrorBox } from "../components/ui";
+import { unlinkTeam } from "../lib/api";
 import { useLeague } from "../lib/data";
 import { deviceId, enablePush, getNotify, pushSupported, saveNotify } from "../lib/push";
 import { session, useSession } from "../lib/session";
@@ -11,15 +12,39 @@ export function SettingsPage() {
   const s = useSession();
   const league = useLeague();
   const navigate = useNavigate();
+  const [error, setError] = useState<unknown>(null);
   const names = new Map(league.data?.teams.map((t) => [t.id, t.name]));
+
+  /** Scollega la squadra della rosa dal profilo: alla prossima apertura si sceglie di nuovo la squadra. */
+  async function unlink() {
+    const team = s?.myTeamId ? names.get(s.myTeamId) ?? "la squadra" : "la squadra";
+    if (!confirm(`Scollegare ${team} dal tuo profilo? Potrai collegare di nuovo una squadra libera.`)) return;
+    setError(null);
+    try { await unlinkTeam(); navigate("/accesso"); } catch (e) { setError(e); }
+  }
 
   return (
     <div className="flex flex-col gap-4">
       <h1 className="scoreboard text-3xl leading-none">Impostazioni</h1>
 
       <Card title="Il tuo utente">
-        <p className="mb-3 text-sm">{s?.myTeamId ? names.get(s.myTeamId) ?? "—" : "Nessun utente scelto: puoi solo guardare."}</p>
-        <Button variant="ghost" onClick={() => { session.update({ myTeamId: null }); navigate("/accesso"); }}>Cambia utente</Button>
+        {s?.userId ? (
+          <>
+            <p className="mb-1 text-sm"><b>@{s.username}</b> · {s.myTeamId ? <>squadra <b>{names.get(s.myTeamId) ?? "—"}</b></> : "nessuna squadra collegata"}</p>
+            <p className="mb-3 text-xs text-muted">La squadra collegata non si cambia: puoi scollegarla e poi collegare una squadra libera. L'accesso resta memorizzato su questo dispositivo fino al prossimo login da un altro dispositivo.</p>
+            <div className="flex flex-wrap gap-2">
+              {s.myTeamId && <Button variant="ghost" onClick={unlink}>Scollega utente da rosa</Button>}
+              {!s.myTeamId && <Button variant="ghost" onClick={() => navigate("/accesso")}>Collega una squadra</Button>}
+              <Button variant="ghost" onClick={() => { session.leaveProfile(); navigate("/accesso"); }}>Esci dal profilo</Button>
+            </div>
+            {!!error && <div className="mt-3"><ErrorBox error={error} /></div>}
+          </>
+        ) : (
+          <>
+            <p className="mb-3 text-sm">Nessun profilo collegato: puoi solo guardare.</p>
+            <Button variant="ghost" onClick={() => navigate("/accesso")}>Entra con il tuo profilo</Button>
+          </>
+        )}
       </Card>
 
       {s?.myTeamId && <NotifyCard teamId={s.myTeamId} />}

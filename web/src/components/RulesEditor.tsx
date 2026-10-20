@@ -4,6 +4,7 @@ import {
 } from "@footballlite/core";
 import { useQueryClient } from "@tanstack/react-query";
 import { useState, type ReactNode } from "react";
+import { useNavigate } from "react-router-dom";
 import { api } from "../lib/api";
 import { Button, Card } from "./ui";
 
@@ -70,6 +71,7 @@ function Bands({ label, from, value, bands, onChange }: { label: string; from: s
 /** Regolamento completo della lega, con le stesse voci di Leghe Fantacalcio. */
 export function RulesEditor({ config }: { config: LeagueConfig }) {
   const qc = useQueryClient();
+  const navigate = useNavigate();
   const [c, setC] = useState<LeagueConfig>(config);
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const mods = c.modifiers;
@@ -82,7 +84,8 @@ export function RulesEditor({ config }: { config: LeagueConfig }) {
     try {
       await api("/league/admin/settings", { method: "PUT", body: normalizeConfig(c) });
       await qc.invalidateQueries({ queryKey: ["league"] });
-      setMsg({ ok: true, text: "Regolamento salvato: vale da subito per formazioni e calcoli." });
+      // Impostazioni salvate: si passa all'accesso del profilo e alla scelta della squadra (se non già collegata).
+      navigate("/accesso");
     } catch (e) { setMsg({ ok: false, text: (e as Error).message }); }
   }
 

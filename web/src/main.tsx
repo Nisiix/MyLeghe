@@ -17,17 +17,20 @@ registerSW({ immediate: true });
 
 const queryClient = new QueryClient({ defaultOptions: { queries: { retry: 1, refetchOnWindowFocus: true } } });
 
-/** Serve il codice della lega e la scelta dell'utente (l'admin può entrare anche senza utente, per l'import). */
+/**
+ * Serve il codice della lega e la scelta dell'utente (l'admin può entrare anche senza utente, per l'import).
+ * Con un avviso in sospeso (accesso fatto da un altro dispositivo) si torna alla scelta dell'utente.
+ */
 function Guard({ children }: { children: ReactNode }) {
   const s = useSession();
-  return s && (s.myTeamId || s.admin) ? <>{children}</> : <Navigate to="/accesso" replace />;
+  return s && (s.myTeamId || s.admin) && !s.notice ? <>{children}</> : <Navigate to="/accesso" replace />;
 }
 
 function App() {
   const s = useSession();
   return (
     <Routes>
-      <Route path="/accesso" element={s?.myTeamId ? <Navigate to="/" replace /> : <Access />} />
+      <Route path="/accesso" element={s?.myTeamId && !s.notice ? <Navigate to="/" replace /> : <Access />} />
       <Route element={<Guard><Layout /></Guard>}>
         <Route index element={<Dashboard />} />
         <Route path="formazione" element={<LineupPage />} />

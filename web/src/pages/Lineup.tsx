@@ -1,4 +1,4 @@
-import { moduleShape, orderBench, ROLES, suggestLineup, validateLineup, type LeagueConfig, type ScoredPlayer } from "@footballlite/core";
+import { moduleShape, orderBench, parseLineupText, ROLES, suggestLineup, validateLineup, type LeagueConfig, type ScoredPlayer } from "@footballlite/core";
 import { useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
@@ -58,6 +58,9 @@ function Editor({ teamId, proxyName, round, started, scored, cfg, current }: { t
   const [vice, setVice] = useState<string | null>(initial.vice);
   const captainOn = cfg.modifiers.captain.enabled;
   const [picking, setPicking] = useState<{ role: number; replace: string | null } | null>(null);
+  const [pasting, setPasting] = useState(false);
+  const [pasteText, setPasteText] = useState("");
+  const [pasteError, setPasteError] = useState<string | null>(null);
   const [confirmForce, setConfirmForce] = useState(false);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(current ? null : { ok: true, text: "Ti proponiamo la formazione consigliata: controllala e salvala." });
@@ -78,6 +81,32 @@ function Editor({ teamId, proxyName, round, started, scored, cfg, current }: { t
     setCaptain(sug.captain);
     setVice(sug.vice);
     setMessage({ ok: true, text: `Formazione consigliata applicata (${sug.module.split("").join("-")}). Controlla e salva.` });
+  }
+
+  /**
+   * Formazione incollata come testo (es. condivisa da Leghe Fantacalcio o scritta in chat): modulo, titolari,
+   * panchina, capitano e vice vengono riconosciuti dai nomi e dai ruoli e abbinati alla rosa.
+   */
+  function applyPasted() {
+    const r = parseLineupText(pasteText, scored, cfg);
+    if (!r.starters.length) { setPasteError("Nessun giocatore della rosa riconosciuto nel testo."); return; }
+    const mod = r.module && cfg.modules.includes(r.module) ? r.module : module;
+    setModule(mod);
+    setStarters(r.starters);
+    setBench(r.bench);
+    setCaptain(captainOn ? r.captain : null);
+    setVice(captainOn ? r.vice : null);
+    setPasting(false);
+    setPasteError(null);
+    const notes = [...r.warnings];
+    if (r.unmatched.length) notes.push(`Non riconosciuti: ${r.unmatched.join(", ")}.`);
+    setMessage({
+      ok: r.starters.length === 11 && !r.unmatched.length,
+      text: `Formazione incollata: ${mod.split("").join("-")}, ${r.starters.length} titolari, ${r.bench.length} in panchina.${notes.length ? " " + notes.join(" ") : ""} Controlla e salva.`,
+    });
+  }
+  async function pasteFromClipboard() {
+    try { setPasteText(await navigator.clipboard.readText()); setPasteError(null); } catch { setPasteError("Non riesco a leggere gli appunti: incolla il testo nel riquadro."); }
   }
 
   /** Cambio modulo: si tengono i titolari migliori per ruolo, gli esclusi vanno in panchina. */
@@ -147,7 +176,10 @@ function Editor({ teamId, proxyName, round, started, scored, cfg, current }: { t
           <h1 className="scoreboard text-3xl leading-none">{proxyName ? `Formazione di ${proxyName}` : "La tua formazione"}</h1>
           <p className="mt-1 text-xs text-muted">Giornata {round} · punteggio atteso {fmt(expected)}</p>
         </div>
-        <Button variant="ghost" onClick={applySuggestion}>Consigliata</Button>
+        <div className="flex shrink-0 gap-2">
+          <Button variant="ghost" onClick={() => { setPasting(true); setPasteError(null); }}>Incolla</Button>
+          <Button variant="ghost" onClick={applySuggestion}>Consigliata</Button>
+        </div>
       </div>
 
       {proxyName ? (
@@ -245,6 +277,18 @@ function Editor({ teamId, proxyName, round, started, scored, cfg, current }: { t
             </li>
           ))}
         </ul>
+      </Sheet>
+
+      <Sheet open={pasting} onClose={() => setPasting(false)} title="Incolla la formazione">
+        <p className="mb-2 text-sm text-muted">Incolla il testo della formazione (es. quella condivisa da Leghe Fantacalcio o scritta in chat): FootballLite riconosce il modulo, i titolari, la panchina e il capitano dai nomi e dai ruoli indicati.</p>
+        <textarea className="h-48 w-full rounded-xl border border-line bg-surface p-3 font-mono text-sm outline-none focus:border-accent" value={pasteText} onChange={(e) => setPasteText(e.target.value)}
+          placeholder={"Squadra (3-4-3)\nVicario\nMiranda J.\n…\n----------\nMeret\n…"} aria-label="Testo della formazione" />
+        {pasteError && <p className="mt-2 text-sm text-danger">{pasteError}</p>}
+        <div className="mt-3 flex gap-2">
+          {typeof navigator !== "undefined" && !!navigator.clipboard?.readText && <Button variant="ghost" className="flex-1" onClick={pasteFromClipboard}>Dagli appunti</Button>}
+          <Button variant="card" className="flex-1" disabled={!pasteText.trim()} onClick={applyPasted}>Applica</Button>
+        </div>
+        <p className="mt-3 text-[11px] text-muted">Senza «Titolari» e «Panchina» (o una riga di trattini), i titolari sono i primi giocatori per ruolo secondo il modulo, oppure i primi 11. Capitano e vice con (C) e (VC). Se un nome è ambiguo, aggiungi l'iniziale.</p>
       </Sheet>
 
       <Sheet open={confirmForce} onClose={() => setConfirmForce(false)} title="Modificare a giornata iniziata?">

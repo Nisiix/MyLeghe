@@ -1,8 +1,8 @@
 // Lega, squadre, rose importate e formazioni (salvate solo in FootballLite).
 
 import { matchPlayer, normalizeConfig, validateLineup, type CalendarDay, type CandidatePlayer, type ImportedTeam, type LeagueConfig, type Role } from "@footballlite/core";
-import { Hono } from "hono";
-import { newCode, normalizeCode, requireAdmin, requireSession, sha256, signSession, type AppEnv } from "./auth";
+import { Hono, type Context } from "hono";
+import { hashPassword, MIN_PASSWORD, newCode, normalizeCode, requireAdmin, requireSession, sha256, signSession, USERNAME_RE, verifyPassword, type AppEnv, type SessionClaims } from "./auth";
 import { kvRead, kvSet } from "./schedule";
 import { SOURCE_TERMS, sourcesAccepted } from "./terms";
 import { calibrateLeague, type CalibrationResult } from "./calibration";
@@ -38,6 +38,9 @@ league.post("/leagues", async (c) => {
   const { name, acceptAppTerms } = await c.req.json<{ name: string; acceptAppTerms?: boolean }>();
   if (acceptAppTerms !== true) return c.json({ error: "Accetta le condizioni d'uso per creare una lega." }, 400);
   if (!name?.trim() || name.trim().length > 60) return c.json({ error: "Nome lega obbligatorio (massimo 60 caratteri)" }, 400);
+  // Il nome identifica la lega: non può coincidere con quello di una lega già presente.
+  const dup = await c.env.DB.prepare("SELECT 1 FROM leagues WHERE name = ? COLLATE NOCASE").bind(name.trim()).first();
+  if (dup) return c.json({ error: "Esiste già una lega con questo nome: scegline un altro." }, 409);
   // Limite semplice contro gli abusi: al massimo 50 leghe create al giorno nell'installazione.
   const today = await c.env.DB.prepare("SELECT COUNT(*) AS n FROM leagues WHERE created_at > ?").bind(Date.now() - 86400_000).first<{ n: number }>();
   if ((today?.n ?? 0) >= 50) return c.json({ error: "Troppe leghe create oggi: riprova domani." }, 429);
@@ -54,11 +57,12 @@ league.post("/leagues", async (c) => {
 /** La lega è utilizzabile solo dopo l'import di rose e calendario. */
 async function leagueReady(db: D1Database, leagueId: string) {
   const teams = await db.prepare(
-    "SELECT t.id, t.name, (SELECT COUNT(*) FROM roster r WHERE r.team_id = t.id) AS n FROM teams t WHERE t.league_id = ? ORDER BY t.position",
-  ).bind(leagueId).all<{ id: number; name: string; n: number }>();
+    `SELECT t.id, t.name, u.username, (SELECT COUNT(*) FROM roster r WHERE r.team_id = t.id) AS n
+     FROM teams t LEFT JOIN users u ON u.team_id = t.id WHERE t.league_id = ? ORDER BY t.position`,
+  ).bind(leagueId).all<{ id: number; name: string; username: string | null; n: number }>();
   const cal = await db.prepare("SELECT COUNT(*) AS n FROM league_calendar WHERE league_id = ?").bind(leagueId).first<{ n: number }>();
-  // Le squadre senza rosa (presenti nel file ma vuote) non sono selezionabili.
-  const withRoster = (teams.results ?? []).filter((t) => t.n > 0).map(({ id, name }) => ({ id, name }));
+  // Le squadre senza rosa (presenti nel file ma vuote) non sono selezionabili. `username` è il profilo collegato (null se libera).
+  const withRoster = (teams.results ?? []).filter((t) => t.n > 0).map(({ id, name, username }) => ({ id, name, username }));
   const hasRoster = withRoster.length > 0;
   const hasCalendar = (cal?.n ?? 0) > 0;
   return { ready: hasRoster && hasCalendar, teams: withRoster, hasRoster, hasCalendar };
@@ -87,13 +91,68 @@ league.post("/session", async (c) => {
   return c.json({ token: await signSession(c.env, claims), league: { id: lrow.id, name: lrow.name }, admin, ...state });
 });
 
-/** Scelta dell'utente (squadra) dopo il codice condiviso: da qui si può schierare la sua formazione. */
+/** Squadre della lega con il profilo collegato (per la scelta della squadra dopo il login). */
+league.get("/session/teams", requireSession, async (c) => c.json(await leagueReady(c.env.DB, c.get("session").lid)));
+
+interface UserRow { id: number; team_id: number | null; username: string; pass_hash: string; salt: string }
+
+/** Nuovo accesso del profilo: le sessioni aperte su altri dispositivi decadono. */
+async function openLogin(c: Context<AppEnv>, user: UserRow) {
+  const s = c.get("session");
+  const sid = crypto.randomUUID();
+  await c.env.DB.prepare("UPDATE users SET session_id = ?, last_login_at = ? WHERE id = ?").bind(sid, Date.now(), user.id).run();
+  const claims: SessionClaims = { ...s, tids: user.team_id ? [user.team_id] : [], uid: user.id, sid, exp: Math.floor(Date.now() / 1000) + SESSION_DAYS * 86400 };
+  return c.json({ token: await signSession(c.env, claims), userId: user.id, username: user.username, teamId: user.team_id });
+}
+
+/** Creazione del profilo utente (username e password) nella lega. */
+league.post("/session/register", requireSession, async (c) => {
+  const s = c.get("session");
+  const body = await c.req.json<{ username?: string; password?: string }>();
+  const username = (body.username ?? "").trim(), password = body.password ?? "";
+  if (!USERNAME_RE.test(username)) return c.json({ error: "Username da 3 a 24 caratteri: lettere, numeri, punto, trattino o underscore." }, 400);
+  if (password.length < MIN_PASSWORD) return c.json({ error: `Password di almeno ${MIN_PASSWORD} caratteri.` }, 400);
+  const taken = await c.env.DB.prepare("SELECT 1 FROM users WHERE league_id = ? AND username = ? COLLATE NOCASE").bind(s.lid, username).first();
+  if (taken) return c.json({ error: "Username già usato in questa lega: scegline un altro." }, 409);
+  const { hash, salt } = await hashPassword(c.env, password);
+  const r = await c.env.DB.prepare("INSERT INTO users (league_id, username, pass_hash, salt, created_at) VALUES (?, ?, ?, ?, ?)")
+    .bind(s.lid, username, hash, salt, Date.now()).run();
+  return openLogin(c, { id: Number(r.meta.last_row_id), team_id: null, username, pass_hash: hash, salt });
+});
+
+/** Login del profilo: se ha già la squadra collegata si entra direttamente con quella. */
+league.post("/session/login", requireSession, async (c) => {
+  const s = c.get("session");
+  const body = await c.req.json<{ username?: string; password?: string }>();
+  const user = await c.env.DB.prepare("SELECT id, team_id, username, pass_hash, salt FROM users WHERE league_id = ? AND username = ? COLLATE NOCASE")
+    .bind(s.lid, (body.username ?? "").trim()).first<UserRow>();
+  if (!user || !(await verifyPassword(c.env, body.password ?? "", user.pass_hash, user.salt))) return c.json({ error: "Username o password non corretti." }, 403);
+  return openLogin(c, user);
+});
+
+/**
+ * Collegamento della squadra della rosa al profilo: si fa una sola volta (poi il profilo entra direttamente
+ * con quella squadra) e si può annullare con lo scollegamento. Una squadra può avere un solo profilo.
+ */
 league.post("/session/team", requireSession, async (c) => {
   const s = c.get("session");
+  if (!s.uid) return c.json({ error: "Entra prima con username e password." }, 403);
   const { teamId } = await c.req.json<{ teamId: number }>();
   const state = await leagueReady(c.env.DB, s.lid);
-  if (!state.teams.some((t) => t.id === teamId)) return c.json({ error: "Utente non valido per questa lega" }, 400);
-  return c.json({ token: await signSession(c.env, { ...s, tids: [teamId] }), teamId });
+  const team = state.teams.find((t) => t.id === Number(teamId));
+  if (!team) return c.json({ error: "Squadra non valida per questa lega" }, 400);
+  if (s.tids.length) return c.json({ error: "Il tuo profilo è già collegato a una squadra: per cambiarla scollegala dalle impostazioni." }, 409);
+  if (team.username) return c.json({ error: `${team.name} è già collegata al profilo @${team.username}.` }, 409);
+  await c.env.DB.prepare("UPDATE users SET team_id = ? WHERE id = ? AND team_id IS NULL").bind(team.id, s.uid).run();
+  return c.json({ token: await signSession(c.env, { ...s, tids: [team.id] }), teamId: team.id });
+});
+
+/** Scollega la squadra dal profilo: alla prossima apertura si sceglie di nuovo la squadra. */
+league.delete("/session/team", requireSession, async (c) => {
+  const s = c.get("session");
+  if (!s.uid) return c.json({ error: "Nessun profilo collegato." }, 403);
+  await c.env.DB.prepare("UPDATE users SET team_id = NULL WHERE id = ?").bind(s.uid).run();
+  return c.json({ token: await signSession(c.env, { ...s, tids: [] }), teamId: null });
 });
 
 league.use("/league/*", requireSession);
@@ -101,7 +160,8 @@ league.use("/league/*", requireSession);
 league.get("/league", async (c) => {
   const s = c.get("session");
   const l = await c.env.DB.prepare("SELECT id, name, settings FROM leagues WHERE id = ?").bind(s.lid).first<LeagueRow>();
-  if (!l) return c.json({ error: "Lega non trovata" }, 404);
+  // Lega eliminata (es. pulizia dei dati): la sessione salvata sul dispositivo non vale più.
+  if (!l) return c.json({ error: "Lega non più presente: entra di nuovo con il codice invito." }, 401);
   const teams = await c.env.DB.prepare("SELECT id, name, position, spent FROM teams WHERE league_id = ? ORDER BY position").bind(s.lid).all<TeamRow>();
   const roster = await c.env.DB.prepare(
     `SELECT r.team_id, r.slot, r.name, r.role, r.cost, r.ext_id, r.confidence, p.name AS ext_name, p.team_name AS ext_team
@@ -112,7 +172,7 @@ league.get("/league", async (c) => {
     league: { id: l.id, name: l.name, config: normalizeConfig(JSON.parse(l.settings)) },
     teams: teams.results ?? [],
     roster: roster.results ?? [],
-    me: { teamIds: s.tids, admin: s.admin },
+    me: { teamIds: s.tids, admin: s.admin, userId: s.uid ?? null },
   });
 });
 
@@ -125,6 +185,22 @@ league.put("/league/admin/settings", async (c) => {
   const config = normalizeConfig(await c.req.json());
   await c.env.DB.prepare("UPDATE leagues SET settings = ? WHERE id = ?").bind(JSON.stringify(config), s.lid).run();
   return c.json({ config });
+});
+
+/** Profili utente della lega (username, squadra collegata, ultimo accesso), per l'admin. */
+league.get("/league/admin/users", async (c) => {
+  const s = c.get("session");
+  const rows = await c.env.DB.prepare(
+    "SELECT u.id, u.username, u.last_login_at, u.team_id, t.name AS team FROM users u LEFT JOIN teams t ON t.id = u.team_id WHERE u.league_id = ? ORDER BY u.username COLLATE NOCASE",
+  ).bind(s.lid).all<{ id: number; username: string; last_login_at: number | null; team_id: number | null; team: string | null }>();
+  return c.json(rows.results ?? []);
+});
+
+/** Elimina un profilo (password dimenticata): la squadra torna libera e l'utente creerà di nuovo username e password. */
+league.delete("/league/admin/users/:id", async (c) => {
+  const s = c.get("session");
+  const r = await c.env.DB.prepare("DELETE FROM users WHERE id = ? AND league_id = ?").bind(Number(c.req.param("id")), s.lid).run();
+  return c.json({ reset: (r.meta.changes ?? 0) > 0 });
 });
 
 /** Pool dei giocatori di Serie A per l'abbinamento (dalla fonte dati, salvati in `players`). */

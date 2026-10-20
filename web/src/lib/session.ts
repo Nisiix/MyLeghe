@@ -4,10 +4,17 @@ import { useSyncExternalStore } from "react";
 
 export interface Session {
   token: string;
+  /** Token della sola lega (prima della scelta dell'utente): serve per tornare alla scelta dell'utente. */
+  leagueToken?: string;
   league: { id: string; name: string };
   admin: boolean;
-  /** Utente (squadra) scelto dopo il codice condiviso. */
+  /** Squadra della rosa collegata al profilo (scelta una sola volta; si scollega dalle impostazioni). */
   myTeamId: number | null;
+  /** Profilo (username e password) con cui si è entrati. */
+  userId?: number | null;
+  username?: string | null;
+  /** Avviso da mostrare all'accesso (es. accesso fatto da un altro dispositivo). */
+  notice?: string | null;
 }
 
 interface Store {
@@ -53,6 +60,11 @@ export const session = {
   },
   switchTo(leagueId: string) {
     if (store.sessions[leagueId]) write({ ...store, current: leagueId });
+  },
+  /** Esce dal profilo restando nella lega (token della sola lega): si torna al login con username e password. */
+  leaveProfile(notice?: string) {
+    if (!currentSnapshot) return;
+    session.set({ ...currentSnapshot, token: currentSnapshot.leagueToken ?? currentSnapshot.token, myTeamId: null, userId: null, username: null, notice: notice ?? null });
   },
   /** Esce dalla lega corrente; se ce ne sono altre si passa alla prima. */
   logout() {

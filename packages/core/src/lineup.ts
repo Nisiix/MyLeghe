@@ -20,8 +20,11 @@ export interface PlayerOutlook {
   opponentFactor?: number;
 }
 
+/** Arrotonda una percentuale al 5% più vicino (50, 55, 60…), come la titolarità mostrata nell'app. */
+export const roundPercent5 = (p: number) => Math.round(p / 5) * 5;
+
 /**
- * Probabilità di titolarità 0–100.
+ * Probabilità di titolarità 0–100, arrotondata al 5% più vicino.
  * Formazione ufficiale > undici probabile > titolarità recente pesata; indisponibile = 0, in dubbio = metà.
  */
 export function starterProbability(o: PlayerOutlook): number {
@@ -38,7 +41,7 @@ export function starterProbability(o: PlayerOutlook): number {
   else if (o.predicted === "bench") p = 0.05 + 0.25 * history;
   else p = history;
   if (o.doubtful) p *= 0.5;
-  return Math.round(Math.max(0, Math.min(1, p)) * 100);
+  return roundPercent5(Math.max(0, Math.min(1, p)) * 100);
 }
 
 export interface RosterEntry {

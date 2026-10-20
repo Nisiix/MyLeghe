@@ -19,6 +19,7 @@ export function AdminPage() {
       <RosterImport config={league.data.league.config} />
       <CalendarImportCard />
       <Unmatched />
+      <UsersCard />
       <RulesEditor config={league.data.league.config} />
     </div>
   );
@@ -161,6 +162,43 @@ function CalibrationNote() {
         ? <>Voto statistico calibrato su {c.samples} punteggi ufficiali della lega: scarto medio per squadra da {fmt(c.maeBefore)} a {fmt(c.maeAfter)} punti (correzione: media {c.offset >= 0 ? "+" : ""}{fmt(c.offset)}, dispersione ×{fmt(c.scale)}).</>
         : <>Calibrazione del voto statistico: servono almeno {MIN_CALIBRATION_SAMPLES} punteggi ufficiali di squadre che hanno inserito la formazione in FootballLite. Si aggiorna a ogni import del calendario.</>}
     </p>
+  );
+}
+
+interface UserRow { id: number; username: string; last_login_at: number | null; team_id: number | null; team: string | null }
+
+/** Profili utente della lega con la squadra collegata: l'admin può eliminarne uno (password dimenticata) perché venga creato di nuovo. */
+function UsersCard() {
+  const qc = useQueryClient();
+  const q = useQuery({ queryKey: ["admin-users"], queryFn: () => api<UserRow[]>("/league/admin/users") });
+  const [error, setError] = useState<unknown>(null);
+  async function reset(u: UserRow) {
+    if (!confirm(`Eliminare il profilo @${u.username}? L'utente dovrà creare di nuovo username e password${u.team ? ` e la squadra ${u.team} tornerà libera` : ""}.`)) return;
+    setError(null);
+    try {
+      await api(`/league/admin/users/${u.id}`, { method: "DELETE" });
+      await qc.invalidateQueries({ queryKey: ["admin-users"] });
+      await qc.invalidateQueries({ queryKey: ["access-teams"] });
+    } catch (e) { setError(e); }
+  }
+  return (
+    <Card title="Utenti">
+      <p className="mb-3 text-sm text-muted">Ogni partecipante crea un profilo con username e password e collega una volta la sua squadra della rosa (può scollegarla dalle impostazioni). L'accesso resta attivo solo sull'ultimo dispositivo usato.</p>
+      {q.isLoading ? <Spinner /> : !q.data?.length ? <Empty>Nessun profilo ancora creato.</Empty> : (
+        <ul className="divide-y divide-line text-sm">
+          {q.data.map((u) => (
+            <li key={u.id} className="flex items-center justify-between gap-3 py-2">
+              <span className="min-w-0">
+                <span className="block font-semibold">@{u.username}</span>
+                <span className="block text-xs text-muted">{u.team ?? "Nessuna squadra collegata"}{u.last_login_at ? ` · ultimo accesso ${new Date(u.last_login_at).toLocaleDateString("it-IT")}` : ""}</span>
+              </span>
+              <button className="shrink-0 text-xs font-semibold text-danger" onClick={() => reset(u)}>Elimina</button>
+            </li>
+          ))}
+        </ul>
+      )}
+      {!!error && <div className="mt-3"><ErrorBox error={error} /></div>}
+    </Card>
   );
 }
 

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   DEFAULT_CONFIG, dueReminder, goalsFromPoints, matchPlayer, normalizeConfig, parseCsv, parseRosterGrid,
-  parseCalendarGrid, playerLiveScore, computeTeam, statVote, subRolesFromLineup, voteEligibility, fitCalibration, computeMatch, matchGoals, noLineupScore, scorePlayers, starterDrops, starterProbability, suggestLineup, validateLineup,
+  parseCalendarGrid, parseLineupText, playerLiveScore, computeTeam, statVote, subRolesFromLineup, voteEligibility, fitCalibration, computeMatch, matchGoals, noLineupScore, scorePlayers, starterDrops, starterProbability, suggestLineup, validateLineup,
   type Cell, type RosterEntry,
 } from "../src";
 
@@ -96,6 +96,18 @@ describe("titolarità e formazione consigliata", () => {
     expect(starterProbability({ recentStarts: [true, true, true], doubtful: true })).toBe(50);
     expect(starterProbability({ recentStarts: [false, false], predicted: "starter" })).toBe(70);
     expect(starterProbability({ recentStarts: [true], predicted: "bench", confirmed: true })).toBe(5);
+  });
+
+  it("arrotonda la titolarità al 5% più vicino", () => {
+    // 1 − 0,25 = 75% esatto; (0,35 + 0,25) / 0,78 ≈ 77% → 75; 0,35 / 0,78 ≈ 45% → 45.
+    expect(starterProbability({ recentStarts: [true, false, true, true, true] })).toBe(75);
+    expect(starterProbability({ recentStarts: [true, true, false] })).toBe(75);
+    expect(starterProbability({ recentStarts: [true, false, false] })).toBe(45);
+    // 0,7 + 0,25 × 0,35 / 0,78 ≈ 81% → 80.
+    expect(starterProbability({ recentStarts: [true, false, false], predicted: "starter" })).toBe(80);
+    for (const o of [{ recentStarts: [true, true, false, true] }, { recentStarts: [false, true], doubtful: true }]) {
+      expect(starterProbability(o) % 5).toBe(0);
+    }
   });
 
   it("sceglie un modulo ammesso con 11 titolari validi", () => {
@@ -306,5 +318,112 @@ describe("calibrazione sui risultati ufficiali", () => {
 
   it("non corregge con pochi dati", () => {
     expect(fitCalibration(samples.slice(0, 5))).toBeNull();
+  });
+});
+
+describe("formazione incollata", () => {
+  const roster: RosterEntry[] = [
+    { id: "1", name: "Vicario", role: 1 }, { id: "2", name: "Meret", role: 1 }, { id: "3", name: "Palmisani", role: 1 },
+    { id: "4", name: "Miranda J.", role: 2 }, { id: "5", name: "Ostigard", role: 2 }, { id: "6", name: "Tavares N.", role: 2 },
+    { id: "7", name: "Celik", role: 2 }, { id: "8", name: "Mina", role: 2 }, { id: "9", name: "Monterisi", role: 2 }, { id: "10", name: "Delprato", role: 2 },
+    { id: "11", name: "Zielinski", role: 3 }, { id: "12", name: "Rabiot", role: 3 }, { id: "13", name: "McKennie", role: 3 }, { id: "14", name: "Politano", role: 3 },
+    { id: "15", name: "Kamara H.", role: 3 }, { id: "16", name: "Ederson D.S.", role: 3 }, { id: "17", name: "Koopmeiners", role: 3 },
+    { id: "18", name: "Ramos G.", role: 4 }, { id: "19", name: "Varela G.", role: 4 }, { id: "20", name: "Adams C.", role: 4 },
+    { id: "21", name: "Esposito Se.", role: 4 }, { id: "22", name: "Esposito Sa.", role: 4 }, { id: "23", name: "Martinez L.", role: 4 },
+  ];
+  const shared = `Skibidi Boppy (3-4-3)
+By Forza Napoli
+
+Vicario
+Miranda J.
+Ostigard
+Tavares N.
+Zielinski
+Rabiot
+McKennie
+Politano
+Ramos G.
+Varela G.
+Adams C.
+----------------------
+Palmisani
+Meret
+Celik
+Mina
+Monterisi
+Delprato
+Kamara H.
+Ederson D.S.
+Koopmeiners
+Esposito Se.
+`;
+
+  it("legge la formazione condivisa da Leghe Fantacalcio: modulo, undici e panchina in ordine", () => {
+    const r = parseLineupText(shared, roster, cfg);
+    expect(r.module).toBe("343");
+    expect(r.starters).toEqual(["1", "4", "5", "6", "11", "12", "13", "14", "18", "19", "20"]);
+    expect(r.bench).toEqual(["3", "2", "7", "8", "9", "10", "15"]);
+    expect(r.unmatched).toEqual([]);
+    expect(r.warnings.some((w) => w.includes("panchina"))).toBe(true);
+    expect(validateLineup({ starters: r.starters.map((id) => roster.find((p) => p.id === id)!), bench: r.bench.map((id) => roster.find((p) => p.id === id)!), module: r.module! }, cfg)).toEqual([]);
+  });
+
+  it("usa i ruoli indicati, deduce il modulo e legge capitano e vice", () => {
+    const text = `Titolari
+Portiere: Vicario
+Difensori: Miranda, Ostigard, Tavares, Celik
+Centrocampisti: Zielinski (C), Rabiot, McKennie
+Attaccanti: Ramos, Varela (VC), Adams
+Panchina
+P Meret
+D Mina
+A Esposito Se.`;
+    const r = parseLineupText(text, roster, cfg);
+    expect(r.module).toBe("433");
+    expect(r.starters).toHaveLength(11);
+    expect(r.captain).toBe("11");
+    expect(r.vice).toBe("19");
+    expect(r.bench).toEqual(["2", "8", "21"]);
+    expect(r.unmatched).toEqual([]);
+  });
+
+  it("segnala i nomi ambigui o sconosciuti e con il modulo separa titolari e panchina", () => {
+    const text = "4-4-2\nVicario, Miranda, Ostigard, Tavares, Celik, Zielinski, Rabiot, McKennie, Politano, Ramos, Esposito, Pinco Pallino, Meret";
+    const r = parseLineupText(text, roster, cfg);
+    expect(r.module).toBe("442");
+    expect(r.unmatched).toEqual(["Esposito", "Pinco Pallino"]);
+    expect(r.warnings.some((w) => w.includes("Esposito Se.") && w.includes("Esposito Sa."))).toBe(true);
+    expect(r.starters).toHaveLength(10);
+    expect(r.bench).toEqual(["2"]);
+    expect(r.warnings.some((w) => w.includes("10 titolari"))).toBe(true);
+  });
+
+  it("titolari prima della riga tratteggiata e riserve dopo, anche con grassetto e trattini spaziati", () => {
+    const text = `*Skibidi Boppy* (4-3-3)
+*Vicario*
+*Miranda J.*
+*Ostigard*
+*Tavares N.*
+*Celik*
+*Zielinski*
+*Rabiot*
+*McKennie*
+*Ramos G.*
+*Varela G.*
+*Adams C.*
+- - - - - - - - - -
+Meret
+Mina
+Politano`;
+    const r = parseLineupText(text, roster, cfg);
+    expect(r.module).toBe("433");
+    expect(r.starters).toEqual(["1", "4", "5", "6", "7", "11", "12", "13", "18", "19", "20"]);
+    expect(r.bench).toEqual(["2", "8", "14"]);
+    expect(r.unmatched).toEqual([]);
+  });
+
+  it("non confonde l'iniziale del nome con il ruolo", () => {
+    const r = parseLineupText("Adams C.\nMartinez L.\nRamos G", roster, cfg);
+    expect(r.starters).toEqual(["20", "23", "18"]);
   });
 });
