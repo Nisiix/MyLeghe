@@ -16,11 +16,14 @@ export function LineupPage() {
   const round = useRound();
   const outlook = useOutlook();
   const lineups = useLineups(round.data?.matchday);
+  // Senza formazione per la giornata si riparte dall'ultima inserita (giornata precedente), come nelle app di lega.
+  const prevRound = round.data && round.data.matchday > 1 ? round.data.matchday - 1 : undefined;
+  const previous = useLineups(prevRound);
   const [params] = useSearchParams();
   // Dopo il salvataggio l'editor si ricarica con la formazione salvata: la conferma resta visibile.
   const [saved, setSaved] = useState<string | null>(null);
 
-  if (league.isLoading || round.isLoading || outlook.isLoading || lineups.isLoading) return <Spinner label="Carico la tua rosa…" />;
+  if (league.isLoading || round.isLoading || outlook.isLoading || lineups.isLoading || (prevRound && previous.isLoading)) return <Spinner label="Carico la tua rosa…" />;
   if (league.error || round.error) return <ErrorBox error={league.error ?? round.error} />;
   if (!s?.myTeamId) return <Card title="Formazione"><Empty>Collega la tua rosa al profilo dalle <Link to="/impostazioni" className="underline">impostazioni</Link>.</Empty></Card>;
   const started = round.data!.phase !== "upcoming";
@@ -36,12 +39,14 @@ export function LineupPage() {
   const cfg = league.data!.league.config;
   const scored = scoredRoster(roster, outlook.data?.players, cfg);
   const unmatched = roster.filter((p) => !p.ext_id).length;
+  const last = current ? undefined : previous.data?.lineups.find((l) => l.team_id === target && !l.hidden && Array.isArray(l.starters));
   return (
     <Editor key={`${target}-${current?.id ?? "new"}`} teamId={target} proxyName={proxyFor?.name} round={round.data!.matchday} started={started}
-      scored={scored} cfg={cfg} current={current} unmatched={unmatched} admin={!!s.admin} savedMessage={saved} onSaved={setSaved} />
+      scored={scored} cfg={cfg} current={current} last={last} unmatched={unmatched} admin={!!s.admin} savedMessage={saved} onSaved={setSaved} />
   );
 }
 
+type Snapshot = { module: string; starters: string[]; bench: string[]; captain: string | null; vice: string | null; message: { ok: boolean; text: string } | null };
 type Picking = { role: number; replace: string | null; target: "starters" | "bench" };
 type Candidate = { id: number; name: string; team_name: string; role?: number | null };
 
@@ -50,24 +55,29 @@ type Candidate = { id: number; name: string; team_name: string; role?: number | 
  * e sotto la rosa per ruolo. Un tocco su un giocatore della rosa lo schiera (campo, poi panchina), un tocco su
  * uno schierato lo toglie; dal titolare si scelgono capitano, vice, panchina o sostituto.
  */
-function Editor({ teamId, proxyName, round, started, scored, cfg, current, unmatched, admin, savedMessage, onSaved }: {
-  teamId: number; proxyName?: string; round: number; started: boolean; scored: Row[]; cfg: LeagueConfig; current?: Lineup; unmatched: number; admin: boolean;
+function Editor({ teamId, proxyName, round, started, scored, cfg, current, last, unmatched, admin, savedMessage, onSaved }: {
+  teamId: number; proxyName?: string; round: number; started: boolean; scored: Row[]; cfg: LeagueConfig; current?: Lineup; last?: Lineup; unmatched: number; admin: boolean;
   savedMessage: string | null; onSaved: (text: string | null) => void;
 }) {
   const qc = useQueryClient();
   const byId = useMemo(() => new Map(scored.map((p) => [p.id, p])), [scored]);
+  /**
+   * Formazione di partenza: quella salvata per la giornata; altrimenti l'ultima inserita (giocatori ancora in rosa);
+   * altrimenti il campo vuoto. La consigliata non si applica da sola: si attiva con il pulsante «Consigliata».
+   */
   const initial = useMemo(() => {
-    if (current) {
+    const from = current ?? last;
+    if (from) {
+      const keep = (ids: number[]) => ids.map(String).filter((id) => byId.has(id));
+      const starters = keep(from.starters);
+      const has = (id: number | null | undefined) => (id != null && starters.includes(String(id)) ? String(id) : null);
       return {
-        module: current.module, starters: current.starters.map(String), bench: current.bench.map(String),
-        captain: current.captain != null ? String(current.captain) : null, vice: current.vice != null ? String(current.vice) : null,
+        module: cfg.modules.includes(from.module) ? from.module : cfg.modules[0], starters, bench: keep(from.bench).slice(0, cfg.benchCount),
+        captain: has(from.captain), vice: has(from.vice), source: current ? "saved" as const : "last" as const,
       };
     }
-    const sug = suggestLineup(scored, cfg);
-    return sug
-      ? { module: sug.module, starters: sug.starters.map((p) => p.id), bench: sug.bench.map((p) => p.id), captain: sug.captain, vice: sug.vice }
-      : { module: cfg.modules[0], starters: [] as string[], bench: [] as string[], captain: null, vice: null };
-  }, [current, scored, cfg]);
+    return { module: cfg.modules[0], starters: [] as string[], bench: [] as string[], captain: null, vice: null, source: "empty" as const };
+  }, [current, last, byId, cfg]);
   const [module, setModule] = useState(initial.module);
   const [starters, setStarters] = useState<string[]>(initial.starters);
   const [bench, setBench] = useState<string[]>(initial.bench);
@@ -86,8 +96,17 @@ function Editor({ teamId, proxyName, round, started, scored, cfg, current, unmat
   const [matchFound, setMatchFound] = useState<Candidate[] | null>(null);
   const [matching, setMatching] = useState(false);
   const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(
-    savedMessage ? { ok: true, text: savedMessage } : current ? null : { ok: true, text: "Ti proponiamo la formazione consigliata: controllala e salvala." },
+    savedMessage ? { ok: true, text: savedMessage }
+      : initial.source === "last" ? { ok: true, text: `Formazione non ancora inserita: ti riproponiamo l'ultima (giornata ${last?.round ?? round - 1}). Controllala e salvala.` }
+      : initial.source === "empty" ? { ok: true, text: "Formazione non ancora inserita: tocca gli slot del campo oppure premi «Consigliata»." }
+      : null,
   );
+  /**
+   * Formazione consigliata come interruttore: attivandola si memorizza la formazione in campo (modulo, titolari,
+   * panchina, capitano, vice e messaggio) e si applica la consigliata; ripremendo il pulsante si torna esattamente
+   * a quella memorizzata, con il suo modulo.
+   */
+  const [suggested, setSuggested] = useState<Snapshot | null>(null);
 
   const shape = moduleShape(module) ?? [0, 0, 0];
   const want: Record<number, number> = { 1: 1, 2: shape[0], 3: shape[1], 4: shape[2] };
@@ -133,10 +152,23 @@ function Editor({ teamId, proxyName, round, started, scored, cfg, current, unmat
     setMessage(null);
   }
 
-  function applySuggestion() {
+  function toggleSuggestion() {
+    if (suggested) {
+      setModule(suggested.module);
+      setStarters(suggested.starters);
+      setBench(suggested.bench);
+      setCaptain(suggested.captain);
+      setVice(suggested.vice);
+      setMessage(suggested.message);
+      setSuggested(null);
+      setAction(null);
+      setPicking(null);
+      return;
+    }
     const sug = suggestLineup(scored, cfg);
     if (!sug) { setMessage({ ok: false, text: "Non ci sono abbastanza giocatori per una formazione valida." }); return; }
     const same = sug.module === module && sug.starters.every((p) => starters.includes(p.id));
+    setSuggested({ module, starters, bench, captain, vice, message });
     setModule(sug.module);
     setStarters(sug.starters.map((p) => p.id));
     setBench(sug.bench.map((p) => p.id));
@@ -144,9 +176,9 @@ function Editor({ teamId, proxyName, round, started, scored, cfg, current, unmat
     setVice(sug.vice);
     setMessage({
       ok: true,
-      text: same
+      text: (same
         ? `La formazione consigliata (${sug.module.split("").join("-")}) coincide con quella in campo.${unmatched === scored.length ? " Senza abbinamento alla fonte dati la stima si basa solo sui crediti d'asta." : ""}`
-        : `Formazione consigliata applicata (${sug.module.split("").join("-")}). Controlla e salva.`,
+        : `Formazione consigliata applicata (${sug.module.split("").join("-")}): controlla e salva.`) + " Ripremi «Consigliata» per tornare a quella di partenza.",
     });
   }
 
@@ -165,6 +197,7 @@ function Editor({ teamId, proxyName, round, started, scored, cfg, current, unmat
     setVice(captainOn ? r.vice : null);
     setPasting(false);
     setPasteError(null);
+    setSuggested(null);
     const notes = [...r.warnings];
     if (r.unmatched.length) notes.push(`Non riconosciuti: ${r.unmatched.join(", ")}.`);
     setMessage({
@@ -267,16 +300,28 @@ function Editor({ teamId, proxyName, round, started, scored, cfg, current, unmat
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex items-end justify-between gap-3">
-        <div>
-          <h1 className="scoreboard text-3xl leading-none">{proxyName ? `Formazione di ${proxyName}` : "La tua formazione"}</h1>
-          <p className="mt-1 text-xs text-muted">Giornata {round} · punteggio atteso {fmt(expected)}</p>
+      <section className="shadow-card overflow-hidden rounded-2xl bg-surface">
+        <div className="flex items-center justify-between gap-3 bg-brand-2 px-4 py-3 text-white">
+          <div className="min-w-0">
+            <h1 className="scoreboard truncate text-xl leading-tight">{proxyName ? `Formazione di ${proxyName}` : "Inserisci formazione"}</h1>
+            <p className="text-xs text-white/75">{round}ª giornata di Serie A</p>
+          </div>
+          <div className="shrink-0 text-right">
+            <div className="text-[11px] text-white/70">Punteggio atteso</div>
+            <div className="scoreboard tabular text-2xl leading-none">{fmt(expected)}</div>
+          </div>
         </div>
-        <div className="flex shrink-0 gap-2">
-          <Button variant="ghost" onClick={() => { setPasting(true); setPasteError(null); }}>Incolla</Button>
-          <Button variant="ghost" onClick={applySuggestion}>Consigliata</Button>
+        <div className="flex gap-2 p-3">
+          <Button variant="outline" className="flex-1 px-2" onClick={() => { setPasting(true); setPasteError(null); }}>Incolla</Button>
+          <button type="button" aria-pressed={!!suggested} onClick={toggleSuggestion}
+            className={`flex flex-1 items-center justify-center gap-1.5 rounded-full border-2 px-2 py-2.5 text-[15px] font-bold transition ${suggested
+              ? "border-card bg-card text-card-ink shadow-[0_0_0_3px_color-mix(in_srgb,var(--color-card)_35%,transparent)]"
+              : "border-brand bg-surface text-brand hover:bg-brand/5 dark:border-line dark:text-ink"}`}>
+            <svg viewBox="0 0 24 24" className="size-4" fill={suggested ? "currentColor" : "none"} stroke="currentColor" strokeWidth={2} aria-hidden><path d="M12 3l2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1-4.4-4.3 6.1-.9z" /></svg>
+            {suggested ? "Consigliata ✓" : "Consigliata"}
+          </button>
         </div>
-      </div>
+      </section>
 
       {proxyName ? (
         <div className="rounded-xl border border-card bg-card/20 p-3 text-sm">
@@ -297,13 +342,18 @@ function Editor({ teamId, proxyName, round, started, scored, cfg, current, unmat
       <div className="flex gap-2 overflow-x-auto pb-1" role="radiogroup" aria-label="Modulo">
         {cfg.modules.map((m) => (
           <button key={m} role="radio" aria-checked={m === module} onClick={() => changeModule(m)}
-            className={`scoreboard rounded-lg border px-3 py-1 text-lg tabular ${m === module ? "border-pitch bg-pitch text-chalk" : "border-line bg-surface text-muted"}`}>
+            className={`shrink-0 rounded-full px-3.5 py-1.5 text-sm font-extrabold tabular transition ${m === module ? "bg-brand text-brand-ink shadow dark:bg-accent dark:text-accent-ink" : "shadow-card bg-surface text-muted"}`}>
             {m.split("").join("-")}
           </button>
         ))}
       </div>
 
-      <div className="pitch flex flex-col gap-5 rounded-2xl px-2 py-5">
+      <div className={`pitch flex flex-col gap-4 rounded-2xl px-1 pt-4 pb-7 ${suggested ? "outline-4 outline-offset-2 outline-card" : ""}`}>
+        {suggested && (
+          <div className="-mt-1 flex justify-center">
+            <span className="rounded-full bg-card px-3 py-0.5 text-xs font-bold text-card-ink shadow">★ Formazione consigliata</span>
+          </div>
+        )}
         {rows.map((r) => (
           <div key={r.role} className="flex justify-center gap-1">
             {r.players.map((p) => <PitchPlayer key={p.id} p={p} badge={badgeOf(p.id)} onClick={() => setAction(p.id)} />)}
@@ -311,14 +361,14 @@ function Editor({ teamId, proxyName, round, started, scored, cfg, current, unmat
           </div>
         ))}
       </div>
-      <p className="-mt-2 text-[11px] text-muted">Sotto ogni giocatore la titolarità stimata da FootballLite (dati BSD). Tocca uno slot vuoto per scegliere chi schierare, un titolare per capitano, vice, panchina o sostituto.</p>
+      <p className="-mt-2 px-1 text-[11px] text-muted">Sotto ogni giocatore la titolarità stimata da FootballLite (dati BSD). Tocca uno slot vuoto per scegliere chi schierare, un titolare per capitano, vice, panchina o sostituto.</p>
 
       {captainOn && (
         <div className="grid grid-cols-2 gap-3 text-sm">
           {([["Capitano", captain, setCaptain], ["Vice capitano", vice, setVice]] as const).map(([label, value, setter]) => (
             <label key={label} className="flex flex-col gap-1">
-              <span className="font-semibold">{label}</span>
-              <select className="rounded-lg border border-line bg-surface px-2 py-2" value={value ?? ""} onChange={(e) => setter(e.target.value || null)}>
+              <span className="text-xs font-semibold text-muted">{label}</span>
+              <select className="shadow-card rounded-xl border border-line bg-surface px-3 py-2.5 font-semibold" value={value ?? ""} onChange={(e) => setter(e.target.value || null)}>
                 <option value="">Scegli…</option>
                 {starterRows.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
               </select>
@@ -328,14 +378,14 @@ function Editor({ teamId, proxyName, round, started, scored, cfg, current, unmat
       )}
 
       {errors.length > 0 && <div className="rounded-xl border border-warn/40 bg-card/20 p-3 text-sm">{errors.map((e) => <div key={e}>{e}</div>)}</div>}
-      {message && <div className={`rounded-xl p-3 text-sm ${message.ok ? "bg-accent/10 text-accent" : "bg-danger/10 text-danger"}`}>{message.text}</div>}
+      {message && <div className={`rounded-xl border-l-4 p-3 text-sm font-medium ${message.ok ? "border-accent bg-accent/10 text-ink" : "border-danger bg-danger/10 text-danger"}`}>{message.text}</div>}
 
-      <Card title={`Panchina ${bench.length}/${cfg.benchCount}`}>
+      <Card title={`Panchina ${bench.length}/${cfg.benchCount}`} className="">
         <p className="mb-2 text-[11px] text-muted">L'ordine conta per le sostituzioni{cfg.benchPerRole ? ` (${cfg.benchPerRole.map((n, i) => `${n} ${["P", "D", "C", "A"][i]}`).join(", ")})` : ""}.</p>
         <ol className="flex flex-col divide-y divide-line">
           {benchRows.map((p, i) => (
             <li key={p.id} className="flex items-center gap-2 py-1.5">
-              <span className="w-5 text-xs text-muted tabular">{i + 1}</span>
+              <span className="flex size-5 items-center justify-center rounded-full bg-surface-2 text-[11px] font-bold text-muted tabular">{i + 1}</span>
               <RoleTag role={p.role} />
               <button className="flex min-w-0 flex-1 items-center gap-2 text-left text-sm" onClick={() => setAction(p.id)}>
                 <span className="truncate">{p.name}</span><span className="truncate text-xs text-muted">{p.outlook?.opponent ?? ""}</span>
@@ -356,8 +406,8 @@ function Editor({ teamId, proxyName, round, started, scored, cfg, current, unmat
         </ol>
       </Card>
 
-      <div className="sticky bottom-4 z-20">
-        <Button variant={started && !proxyName ? "danger" : "card"} className="w-full py-3 text-base" disabled={saving || errors.length > 0} onClick={() => save(false)}>
+      <div className="sticky bottom-[calc(4.5rem+env(safe-area-inset-bottom))] z-20">
+        <Button variant={started && !proxyName ? "danger" : "card"} className="w-full py-3 text-base shadow-lg" disabled={saving || errors.length > 0} onClick={() => save(false)}>
           {saving ? "Salvataggio…" : proxyName ? `Inserisci per ${proxyName}` : started ? "Salva modifica forzata" : "Salva formazione"}
         </Button>
       </div>
@@ -374,7 +424,7 @@ function Editor({ teamId, proxyName, round, started, scored, cfg, current, unmat
           if (!list.length) return null;
           return (
             <div key={role} className="mb-3">
-              <div className="mb-1 flex items-center justify-between text-xs text-muted"><span className="font-semibold">{ROLE_NAME[role]}</span><span>{startersOf(role).length}/{want[role]} in campo</span></div>
+              <div className="-mx-4 mb-1 flex items-center justify-between bg-surface-2 px-4 py-1.5 text-xs text-muted"><span className="flex items-center gap-2 text-[13px] font-bold text-ink"><RoleTag role={role} size={18} />{ROLE_NAME[role]}</span><span>{startersOf(role).length}/{want[role]} in campo</span></div>
               <ul className="flex flex-col divide-y divide-line">
                 {list.map((p) => {
                   const st = stateOf(p.id);
@@ -390,7 +440,7 @@ function Editor({ teamId, proxyName, round, started, scored, cfg, current, unmat
                       {!p.info.ext_id && canMatch
                         ? <button onClick={() => setAction(p.id)} className="rounded-full border border-warn/60 bg-card/20 px-2 text-[11px] font-bold leading-4" aria-label={`Abbina ${p.name} alla fonte dati`}>Abbina</button>
                         : <StarterPercent percent={p.starterPercent} />}
-                      <span className={`w-20 shrink-0 text-right text-xs font-semibold ${st ? (st === "Titolare" ? "text-accent" : "text-muted") : "text-accent"}`}>{st ?? "Schiera"}</span>
+                      <span className={`w-20 shrink-0 rounded-full py-0.5 text-center text-[11px] font-extrabold ${st ? (st === "Titolare" ? "bg-accent text-accent-ink" : "bg-surface-2 text-muted") : "border border-accent text-accent"}`}>{st ?? "Schiera"}</span>
                     </li>
                   );
                 })}
@@ -491,14 +541,17 @@ function statusText(o?: Outlook): string {
 function PitchPlayer({ p, badge, onClick }: { p: Row; badge: "C" | "VC" | null; onClick: () => void }) {
   const low = !Number.isNaN(p.starterPercent) && p.starterPercent < 70;
   return (
-    <button onClick={onClick} className="flex w-[74px] flex-col items-center gap-0.5 text-center text-chalk" aria-label={`${p.name}: opzioni`}>
-      <span className={`relative rounded-full p-0.5 ${low ? "ring-2 ring-card" : ""}`}>
-        <PlayerAvatar name={p.name} role={p.role} size={44} />
-        {badge && <span className="absolute -right-1 -top-1 rounded-full bg-card px-1 text-[10px] font-bold text-card-ink">{badge}</span>}
+    <button onClick={onClick} className="flex w-[72px] flex-col items-center gap-0.5 text-center" aria-label={`${p.name}: opzioni`}>
+      <span className="relative">
+        <PlayerAvatar name={p.name} role={p.role} size={46} />
+        {badge && <span className="absolute -right-1.5 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-card px-1 text-[10px] font-extrabold text-card-ink shadow">{badge}</span>}
+        {low && <span className="absolute -left-1 -top-1 size-3 rounded-full border-2 border-white bg-danger" title="Titolarità sotto il 70%" />}
       </span>
-      <StarterPercent percent={p.starterPercent} />
-      <span className="w-full truncate rounded bg-black/45 px-1 text-[11px] font-semibold leading-4">{p.name}</span>
-      <span className="text-[10px] leading-3 text-chalk/75">{p.outlook?.opponent ?? ""}</span>
+      <span className="mt-0.5 w-full truncate rounded-md bg-white px-1 text-[11px] font-extrabold leading-[18px] text-brand shadow">{p.name}</span>
+      <span className="flex items-center gap-1 text-[10px] font-semibold leading-3 text-white/90">
+        <StarterPercent percent={p.starterPercent} />
+        <span className="max-w-[40px] truncate">{p.outlook?.opponent ?? ""}</span>
+      </span>
     </button>
   );
 }
@@ -507,10 +560,9 @@ function PitchPlayer({ p, badge, onClick }: { p: Row; badge: "C" | "VC" | null; 
 function EmptySlot({ role, onClick }: { role: number; onClick: () => void }) {
   const letter = ["", "P", "D", "C", "A"][role];
   return (
-    <button onClick={onClick} className="flex w-[74px] flex-col items-center gap-0.5 text-center text-chalk/80" aria-label={`Slot vuoto ${ROLE_NAME[role]}: scegli`}>
-      <span className="flex size-11 items-center justify-center rounded-full border-2 border-dashed border-chalk/60 text-base font-bold">{letter}</span>
-      <span className="text-[11px] font-semibold leading-4">Scegli</span>
-      <span className="text-[10px] leading-3 text-chalk/60">{ROLE_NAME[role]}</span>
+    <button onClick={onClick} className="flex w-[72px] flex-col items-center gap-0.5 text-center text-white" aria-label={`Slot vuoto ${ROLE_NAME[role]}: scegli`}>
+      <span className="flex size-[46px] items-center justify-center rounded-full border-2 border-dashed border-white/80 bg-white/15 text-xl font-extrabold">+</span>
+      <span className="mt-0.5 w-full rounded-md bg-black/25 px-1 text-[11px] font-extrabold leading-[18px]">{letter} · Scegli</span>
     </button>
   );
 }

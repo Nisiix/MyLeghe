@@ -25,7 +25,7 @@ export function SettingsPage() {
 
   return (
     <div className="flex flex-col gap-4">
-      <h1 className="scoreboard text-3xl leading-none">Impostazioni</h1>
+      <h1 className="px-1 text-2xl font-extrabold leading-none">Altro</h1>
 
       <Card title="Il tuo utente">
         {s?.userId ? (

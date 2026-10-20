@@ -10,45 +10,54 @@
 }
 
 /*
-  Identità FootballLite: il campo e il tabellone della domenica.
-  Gesso e inchiostro per la base, erba per il campo e le azioni, cartellino giallo solo per l'azione chiave,
-  rosso cartellino solo per i rischi.
+  Identità ispirata alle app di lega di fantacalcio: barra blu notte, fondo grigio chiaro, schede bianche,
+  verde per le azioni, campo verde a strisce, colori di ruolo P arancio / D verde / C blu / A rosso.
+  I nomi dei token restano quelli storici (pitch, card, chalk…) così le pagine non cambiano classi.
 */
 @theme {
-  --color-bg: #f4f6ef;
+  --color-bg: #eef1f6;
   --color-surface: #ffffff;
-  --color-surface-2: #e9eee4;
-  --color-line: #d3dccd;
-  --color-ink: #0a1f17;
-  --color-muted: #56665d;
-  --color-accent: #0d5c3a;
-  --color-accent-ink: #f4f6ef;
-  --color-pitch: #0d5c3a;
-  --color-pitch-deep: #083d27;
-  --color-chalk: #f4f6ef;
-  --color-card: #ffc928;
-  --color-card-ink: #0a1f17;
-  --color-warn: #b7791f;
-  --color-danger: #e5383b;
-  --color-info: #1f6fb2;
+  --color-surface-2: #f4f6fa;
+  --color-line: #dfe4ec;
+  --color-ink: #13203b;
+  --color-muted: #69778f;
+  --color-brand: #0f2350;
+  --color-brand-2: #1a3570;
+  --color-brand-ink: #ffffff;
+  --color-accent: #1d9d4b;
+  --color-accent-ink: #ffffff;
+  --color-pitch: #2e8b3f;
+  --color-pitch-deep: #0f2350;
+  --color-chalk: #ffffff;
+  --color-card: #ffc400;
+  --color-card-ink: #13203b;
+  --color-warn: #e8900c;
+  --color-danger: #e0322e;
+  --color-info: #1c7ed6;
+  --color-role-p: #f39c12;
+  --color-role-d: #27a148;
+  --color-role-c: #1c7ed6;
+  --color-role-a: #e0322e;
   --font-sans: "Archivo", ui-sans-serif, system-ui, sans-serif;
 }
 
-/* Campo di notte: stessi ruoli, tinte invertite. */
+/* Tema scuro: stessa struttura, blu notte al posto del grigio. */
 @media (prefers-color-scheme: dark) {
   :root {
-    --color-bg: #071a12;
-    --color-surface: #0c2419;
-    --color-surface-2: #12301f;
-    --color-line: #1f4130;
-    --color-ink: #eef3ea;
-    --color-muted: #9db3a6;
-    --color-accent: #4cc38a;
-    --color-accent-ink: #04140c;
-    --color-pitch: #0f5132;
-    --color-pitch-deep: #0a3a24;
-    --color-warn: #f2b84b;
-    --color-info: #6cb4ee;
+    --color-bg: #08122a;
+    --color-surface: #101d3b;
+    --color-surface-2: #17274b;
+    --color-line: #24365e;
+    --color-ink: #e9eef8;
+    --color-muted: #93a1bd;
+    --color-brand: #0a1838;
+    --color-brand-2: #142a5a;
+    --color-accent: #32c266;
+    --color-accent-ink: #05210f;
+    --color-pitch: #23733a;
+    --color-pitch-deep: #0a1838;
+    --color-warn: #f5a524;
+    --color-info: #5aa9f0;
   }
 }
 
@@ -64,25 +73,63 @@ body {
   overscroll-behavior-y: none;
 }
 
-/* Tipografia da tabellone per titoli e numeri importanti. */
-.scoreboard { font-stretch: 68%; font-weight: 800; letter-spacing: -0.01em; }
+/* Tipografia dei titoli e dei numeri importanti. */
+.scoreboard { font-stretch: 88%; font-weight: 800; letter-spacing: -0.01em; }
+
+/* Tabellone della giornata: blu notte sfumato con un velo di campo in basso. */
+.hero {
+  background:
+    radial-gradient(120% 80% at 100% 0%, rgba(255, 255, 255, 0.10), transparent 60%),
+    linear-gradient(160deg, var(--color-brand-2) 0%, var(--color-brand) 70%);
+  box-shadow: 0 6px 18px rgba(15, 35, 80, 0.25);
+}
 .tabular { font-variant-numeric: tabular-nums; }
 
-/* Campo visto dall'alto: strisce di taglio e linee di gesso. */
+/* Campo visto dall'alto: strisce di taglio larghe, linee bianche, metà campo e area di rigore. */
 .pitch {
+  position: relative;
   background:
-    linear-gradient(rgba(244, 246, 239, 0.22), rgba(244, 246, 239, 0.22)) center / 100% 2px no-repeat,
-    radial-gradient(circle at 50% 50%, transparent 58px, rgba(244, 246, 239, 0.22) 59px, rgba(244, 246, 239, 0.22) 61px, transparent 62px),
-    repeating-linear-gradient(0deg, rgba(255, 255, 255, 0.04) 0 48px, transparent 48px 96px),
-    var(--color-pitch);
-  border: 2px solid rgba(244, 246, 239, 0.3);
+    linear-gradient(rgba(255, 255, 255, 0.35), rgba(255, 255, 255, 0.35)) 50% 0 / 100% 2px no-repeat,
+    repeating-linear-gradient(180deg, rgba(255, 255, 255, 0.07) 0 56px, transparent 56px 112px),
+    linear-gradient(180deg, color-mix(in srgb, var(--color-pitch) 88%, white) 0%, var(--color-pitch) 100%);
+  box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.35);
+  overflow: hidden;
 }
+.pitch::before {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: -48px;
+  width: 96px;
+  height: 96px;
+  transform: translateX(-50%);
+  border: 2px solid rgba(255, 255, 255, 0.35);
+  border-radius: 9999px;
+  pointer-events: none;
+}
+.pitch::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  bottom: 0;
+  width: 56%;
+  height: 64px;
+  transform: translateX(-50%);
+  border: 2px solid rgba(255, 255, 255, 0.35);
+  border-bottom: 0;
+  pointer-events: none;
+}
+.pitch > * { position: relative; z-index: 1; }
 
-:focus-visible { outline: 3px solid var(--color-card); outline-offset: 2px; }
+/* Ombra morbida delle schede, come nelle app di lega. */
+.shadow-card { box-shadow: 0 1px 2px rgba(15, 35, 80, 0.06), 0 2px 8px rgba(15, 35, 80, 0.06); }
+
+:focus-visible { outline: 3px solid var(--color-info); outline-offset: 2px; }
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; }
 }
 
 .safe-bottom { padding-bottom: max(1rem, env(safe-area-inset-bottom)); }
+.safe-nav { padding-bottom: max(0.25rem, env(safe-area-inset-bottom)); }
 .safe-top { padding-top: max(0.75rem, env(safe-area-inset-top)); }

@@ -43,19 +43,19 @@ function RoundCard({ round }: { round: Round }) {
   const started = round.phase !== "upcoming";
 
   return (
-    <section className="rounded-2xl bg-pitch-deep p-5 text-chalk" aria-label="Tabellone della giornata">
+    <section className="hero rounded-2xl p-5 text-chalk" aria-label="Tabellone della giornata">
       <div className="mb-4 flex items-baseline justify-between gap-2">
-        <h2 className="scoreboard text-2xl leading-none">Giornata {round.matchday}</h2>
+        <h2 className="text-xl font-extrabold leading-none">{round.matchday}ª giornata</h2>
         <span className="text-xs text-chalk/70">{mine ? `${mine.league_day}ª di lega · ` : ""}Serie A</span>
       </div>
       {mine && (
         <div className="mb-5 grid grid-cols-[1fr_auto_1fr] items-center gap-3 text-center">
           <TeamHead id={mine.home_team_id} name={teams.get(mine.home_team_id) ?? "?"} />
-          <span className="scoreboard text-3xl text-chalk/60">vs</span>
+          <span className="rounded-full bg-white/10 px-3 py-1 text-sm font-extrabold text-chalk/80">VS</span>
           <TeamHead id={mine.away_team_id} name={teams.get(mine.away_team_id) ?? "?"} />
         </div>
       )}
-      <div className="flex items-end justify-between gap-3">
+      <div className="flex flex-col gap-4">
         <div>
           {round.phase === "live" ? (
             <div className="flex items-center gap-2 text-lg font-semibold"><span className="size-2.5 animate-pulse rounded-full bg-danger" />Giornata in corso</div>
@@ -77,9 +77,9 @@ function RoundCard({ round }: { round: Round }) {
           )}
         </div>
         {started ? (
-          <Link to="/live"><Button variant="card">Visualizza live</Button></Link>
+          <Link to="/live" className="block"><Button variant="card" className="w-full py-3 text-base">Visualizza live</Button></Link>
         ) : s?.myTeamId ? (
-          <Link to="/formazione"><Button variant="card">{myLineup ? "Modifica formazione" : "Inserisci formazione"}</Button></Link>
+          <Link to="/formazione" className="block"><Button variant="card" className="w-full py-3 text-base">{myLineup ? "Modifica formazione" : "Inserisci formazione"}</Button></Link>
         ) : null}
       </div>
     </section>
@@ -159,7 +159,7 @@ function LeagueDayCard({ round }: { round: Round }) {
       <ul className="flex flex-col divide-y divide-line">
         {matches.map((m) => {
           const mine = m.home_team_id === s?.myTeamId || m.away_team_id === s?.myTeamId;
-          const dot = (id: number) => round.phase === "upcoming" && <span title={inserted.has(id) ? "Formazione inserita" : "Formazione non inserita"} className={`size-2 shrink-0 rounded-full ${inserted.has(id) ? "bg-accent" : "bg-line"}`} />;
+          const dot = (id: number) => round.phase === "upcoming" && <span title={inserted.has(id) ? "Formazione inserita" : "Formazione non inserita"} className={`size-2 shrink-0 rounded-full ${inserted.has(id) ? "bg-accent" : "bg-danger/60"}`} />;
           return (
             <li key={`${m.league_day}-${m.home_team_id}`} className={`grid grid-cols-[1fr_auto_1fr] items-center gap-2 py-2.5 text-sm ${mine ? "font-semibold" : ""}`}>
               <span className="flex min-w-0 items-center gap-2"><span className="truncate">{names.get(m.home_team_id)}</span>{dot(m.home_team_id)}</span>

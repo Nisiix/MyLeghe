@@ -18,8 +18,8 @@ export default defineConfig({
         short_name: "FootballLite",
         description: "Formazione, titolarità stimata e live per la tua lega di fantacalcio",
         lang: "it",
-        theme_color: "#083d27",
-        background_color: "#f4f6ef",
+        theme_color: "#0f2350",
+        background_color: "#eef1f6",
         display: "standalone",
         start_url: "/",
         icons: [

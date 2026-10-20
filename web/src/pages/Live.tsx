@@ -48,7 +48,7 @@ export function LivePage() {
         </section>
       )}
 
-      <section className="flex items-center justify-between gap-3 rounded-xl border border-line bg-surface p-3">
+      <section className="shadow-card flex items-center justify-between gap-3 rounded-2xl bg-surface p-3">
         <div className="min-w-0 text-xs text-muted">
           {simulate
             ? <>Risultato stimato con il regolamento della lega: chi deve ancora giocare vale fantavoto {SIM_DEFAULT_VOTE}{Object.keys(overrides).length ? ", con le tue ipotesi" : ""}.</>
@@ -100,7 +100,7 @@ function Scoreboard({ match, names, calc, simulate, phase }: { match: CalendarRo
   const hp = r?.home.final ?? calc.home?.score.total ?? null;
   const ap = r?.away.final ?? calc.away?.score.total ?? null;
   return (
-    <section className="rounded-2xl bg-pitch-deep p-5 text-chalk" aria-label="Tabellone">
+    <section className="hero rounded-2xl p-5 text-chalk" aria-label="Tabellone">
       <div className="mb-3 flex items-baseline justify-between text-xs text-chalk/70">
         <span>{match.league_day}ª giornata di lega</span>
         <span>{phase === "live" ? (simulate ? "Live · risultato stimato" : "Live · parziale") : phase === "finished" ? "Finale stimato" : simulate ? "Risultato stimato" : "Da giocare"}</span>
