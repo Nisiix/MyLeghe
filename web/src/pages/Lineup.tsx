@@ -2,7 +2,7 @@ import { moduleShape, orderBench, parseLineupText, ROLE_NAME, ROLES, suggestLine
 import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
-import { Button, Card, Empty, ErrorBox, PlayerAvatar, RoleTag, Sheet, Spinner, StarterPercent, fmt } from "../components/ui";
+import { Button, Card, Empty, ErrorBox, RoleTag, Sheet, Shirt, Spinner, StarterPercent, fmt, formatCountdown, useNow } from "../components/ui";
 import { api, ApiError } from "../lib/api";
 import { useLeague, useLineups, useOutlook, useRound, type Lineup, type Outlook, type RosterPlayer } from "../lib/data";
 import { useSession } from "../lib/session";
@@ -41,7 +41,7 @@ export function LineupPage() {
   const unmatched = roster.filter((p) => !p.ext_id).length;
   const last = current ? undefined : previous.data?.lineups.find((l) => l.team_id === target && !l.hidden && Array.isArray(l.starters));
   return (
-    <Editor key={`${target}-${current?.id ?? "new"}`} teamId={target} proxyName={proxyFor?.name} round={round.data!.matchday} started={started}
+    <Editor key={`${target}-${current?.id ?? "new"}`} teamId={target} proxyName={proxyFor?.name} round={round.data!.matchday} deadline={round.data!.deadline} started={started}
       scored={scored} cfg={cfg} current={current} last={last} unmatched={unmatched} admin={!!s.admin} savedMessage={saved} onSaved={setSaved} />
   );
 }
@@ -59,11 +59,12 @@ const SINGULAR: Record<number, string> = { 1: "portiere", 2: "difensore", 3: "ce
 
 /**
  * Inserimento della formazione come in Leghe Fantacalcio: modulo, campo con gli slot del modulo, panchina in ordine
- * e sotto le riserve (chi non è schierato). Un giocatore si trascina sul posto di un altro (scambio), su uno slot
- * libero o in panchina; un tocco su uno schierato lo manda tra le riserve, un tocco su una riserva lo schiera.
+ * e sotto le riserve (chi non è schierato). Un tocco su un giocatore apre la sua scheda con le due destinazioni
+ * possibili (titolare, panchina, riserve: quelle diverse da dove si trova); un giocatore si può anche trascinare sul
+ * posto di un altro (scambio), su uno slot libero o in panchina.
  */
-function Editor({ teamId, proxyName, round, started, scored, cfg, current, last, unmatched, admin, savedMessage, onSaved }: {
-  teamId: number; proxyName?: string; round: number; started: boolean; scored: Row[]; cfg: LeagueConfig; current?: Lineup; last?: Lineup; unmatched: number; admin: boolean;
+function Editor({ teamId, proxyName, round, deadline, started, scored, cfg, current, last, unmatched, admin, savedMessage, onSaved }: {
+  teamId: number; proxyName?: string; round: number; deadline: number; started: boolean; scored: Row[]; cfg: LeagueConfig; current?: Lineup; last?: Lineup; unmatched: number; admin: boolean;
   savedMessage: string | null; onSaved: (text: string | null) => void;
 }) {
   const qc = useQueryClient();
@@ -131,16 +132,6 @@ function Editor({ teamId, proxyName, round, started, scored, cfg, current, last,
     if (vice === id) setVice(null);
   }
 
-  /** Tocco sulla rosa: prima nello slot libero del suo ruolo in campo, altrimenti in panchina. */
-  function addPlayer(id: string) {
-    const p = byId.get(id);
-    if (!p) return;
-    setMessage(null);
-    if (startersOf(p.role).length < want[p.role]) { setStarters([...starters, id]); return; }
-    if (benchRoomFor(p.role)) { setBench([...bench, id]); return; }
-    setMessage({ ok: false, text: `Non c'è posto per ${p.name}: i ${ROLE_NAME[p.role].toLowerCase()} del ${module.split("").join("-")} sono completi e la panchina è piena. Togli prima un giocatore.` });
-  }
-
   function removePlayer(id: string) {
     setStarters(starters.filter((x) => x !== id));
     setBench(bench.filter((x) => x !== id));
@@ -149,10 +140,56 @@ function Editor({ teamId, proxyName, round, started, scored, cfg, current, last,
     setMessage(null);
   }
 
-  /** Tocco su uno schierato (campo o panchina): torna tra le riserve. */
+  /** Scheda del giocatore toccato; `choose` = destinazione piena, si sceglie al posto di chi. */
+  const [choose, setChoose] = useState<"field" | "bench" | null>(null);
+  function openSheet(id: string) { setAction(id); setChoose(null); setMatchFound(null); setMatchQuery(""); }
+  function closeSheet() { setAction(null); setChoose(null); setMatchFound(null); setMatchQuery(""); }
+  const fieldRoom = (p: Row) => startersOf(p.role).length < want[p.role];
+  /** Panchinaro `r` sostituibile con `p` rispettando il limite per ruolo della panchina. */
+  const benchSwapOk = (p: Row, r: Row) => !cfg.benchPerRole || r.role === p.role || benchRows.filter((x) => x.role === p.role).length < cfg.benchPerRole[p.role - 1];
+
+  /** In campo da titolare: nello slot libero del ruolo, oppure al posto di `replace` (che va dove era il giocatore). */
+  function toField(p: Row, replace?: string) {
+    const fromBench = bench.includes(p.id);
+    if (!replace) {
+      setStarters([...starters, p.id]);
+      if (fromBench) setBench(bench.filter((x) => x !== p.id));
+    } else {
+      setStarters(starters.map((x) => (x === replace ? p.id : x)));
+      if (fromBench) setBench(bench.map((x) => (x === p.id ? replace : x)));
+      if (captain === replace) setCaptain(p.id);
+      if (vice === replace) setVice(p.id);
+    }
+    const r = replace ? byId.get(replace) : undefined;
+    setMessage({ ok: true, text: `${p.name} titolare${r ? ` al posto di ${r.name}${fromBench ? ", che va in panchina" : ", che torna tra le riserve"}` : ""}.` });
+    closeSheet();
+  }
+
+  /** In panchina: in coda, oppure al posto del panchinaro `replace` (che torna titolare se dello stesso ruolo, altrimenti tra le riserve). */
+  function toBenchSpot(p: Row, replace?: string) {
+    const fromField = starters.includes(p.id);
+    const r = replace ? byId.get(replace) : undefined;
+    if (!r) {
+      if (fromField) { setStarters(starters.filter((x) => x !== p.id)); clearRoles(p.id); }
+      setBench([...bench, p.id]);
+    } else {
+      setBench(bench.map((x) => (x === r.id ? p.id : x)));
+      if (fromField) {
+        if (r.role === p.role) {
+          setStarters(starters.map((x) => (x === p.id ? r.id : x)));
+          if (captain === p.id) setCaptain(r.id);
+          if (vice === p.id) setVice(r.id);
+        } else { setStarters(starters.filter((x) => x !== p.id)); clearRoles(p.id); }
+      }
+    }
+    setMessage({ ok: true, text: `${p.name} in panchina${r ? ` al posto di ${r.name}${fromField && r.role === p.role ? ", che diventa titolare" : ", che torna tra le riserve"}` : ""}.` });
+    closeSheet();
+  }
+
   function toReserves(p: Row) {
     removePlayer(p.id);
     setMessage({ ok: true, text: `${p.name} spostato tra le riserve.` });
+    closeSheet();
   }
 
   /**
@@ -439,57 +476,85 @@ function Editor({ teamId, proxyName, round, started, scored, cfg, current, last,
   const badgeOf = (id: string) => (captainOn ? (id === captain ? "C" : id === vice ? "VC" : null) : null);
   const stateOf = (id: string) => (starters.includes(id) ? "Titolare" : bench.includes(id) ? `Panchina ${bench.indexOf(id) + 1}` : null);
 
+  const where = (id: string) => (starters.includes(id) ? "field" : bench.includes(id) ? "bench" : "reserve");
+  const deadlineText = new Date(deadline).toLocaleString("it-IT", { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
+  /** Intestazione grigia di sezione, come nelle liste di Leghe Fantacalcio. */
+  const sectionHead = (title: string, right?: React.ReactNode) => (
+    <div className="flex items-center justify-between border-y border-line bg-surface-2 px-4 py-2 text-xs font-extrabold uppercase tracking-wide text-muted">
+      <span>{title}</span>{right && <span className="font-semibold normal-case tracking-normal">{right}</span>}
+    </div>
+  );
+  /** Riga di giocatore nelle liste (panchina, riserve): maglietta, nome, squadra e avversario, titolarità. */
+  const playerRow = (p: Row, lead?: React.ReactNode) => (
+    <>
+      {lead}
+      <button {...grab(p.id, () => openSheet(p.id))} className="draggable flex min-w-0 flex-1 cursor-grab items-center gap-3 text-left" aria-label={`${p.name}: tocca per le opzioni, trascina per spostarlo`}>
+        <Shirt name={p.name} role={p.role} size={36} />
+        <span className="min-w-0 flex-1">
+          <span className="flex items-center gap-1.5 truncate text-[15px] font-bold">
+            <RoleTag role={p.role} size={16} />{p.name}
+            {badgeOf(p.id) && <span className="rounded bg-card px-1 text-[10px] font-extrabold text-card-ink">{badgeOf(p.id)}</span>}
+          </span>
+          <span className="block truncate text-xs text-muted">{[p.info.ext_team, p.outlook?.opponent ? `vs ${p.outlook.opponent}` : null, statusText(p.outlook)].filter(Boolean).join(" · ")}</span>
+        </span>
+      </button>
+      {!p.info.ext_id && canMatch ? <MatchButton name={p.name} onClick={() => openSheet(p.id)} /> : <StarterPercent percent={p.starterPercent} />}
+    </>
+  );
+  const now = useNow();
+
   return (
-    <div className="flex flex-col gap-4">
-      <section className="shadow-card overflow-hidden rounded-2xl bg-surface">
-        <div className="flex items-center justify-between gap-3 bg-brand-2 px-4 py-3 text-white">
+    <div className="-mx-3 -mt-4 flex flex-col">
+      <section className="bg-brand-2 px-4 pt-3 pb-3 text-white">
+        <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
             <h1 className="scoreboard truncate text-xl leading-tight">{proxyName ? `Formazione di ${proxyName}` : "Inserisci formazione"}</h1>
-            <p className="text-xs text-white/75">{round}ª giornata di Serie A</p>
+            <p className="text-xs text-white/75">{round}ª giornata · {started ? "giornata iniziata" : `consegna entro ${deadlineText}`}</p>
           </div>
           <div className="shrink-0 text-right">
-            <div className="text-[11px] text-white/70">Punteggio atteso</div>
-            <div className="scoreboard tabular text-2xl leading-none">{fmt(expected)}</div>
+            {!started && <div className="mb-0.5 inline-block rounded-full bg-white/15 px-2 py-0.5 text-[11px] font-bold tabular">− {formatCountdown(deadline - now)}</div>}
+            <div className="text-[11px] text-white/70">Punteggio atteso <b className="scoreboard tabular text-base text-white">{fmt(expected)}</b></div>
           </div>
         </div>
-        <div className="flex gap-2 p-3">
-          <Button variant="outline" className="flex-1 px-2" onClick={() => { setPasting(true); setPasteError(null); }}>Importa rosa</Button>
+        <div className="mt-3 flex gap-2">
+          <button onClick={() => { setPasting(true); setPasteError(null); }} className="flex-1 rounded-full border border-white/50 px-2 py-2 text-sm font-bold hover:bg-white/10">Importa rosa</button>
           <button type="button" aria-pressed={!!suggested} onClick={toggleSuggestion}
-            className={`flex flex-1 items-center justify-center gap-1.5 rounded-full border-2 px-2 py-2.5 text-[15px] font-bold transition ${suggested
-              ? "border-card bg-card text-card-ink shadow-[0_0_0_3px_color-mix(in_srgb,var(--color-card)_35%,transparent)]"
-              : "border-brand bg-surface text-brand hover:bg-brand/5 dark:border-line dark:text-ink"}`}>
+            className={`flex flex-1 items-center justify-center gap-1.5 rounded-full border px-2 py-2 text-sm font-bold transition ${suggested ? "border-card bg-card text-card-ink" : "border-white/50 hover:bg-white/10"}`}>
             <svg viewBox="0 0 24 24" className="size-4" fill={suggested ? "currentColor" : "none"} stroke="currentColor" strokeWidth={2} aria-hidden><path d="M12 3l2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1-4.4-4.3 6.1-.9z" /></svg>
             {suggested ? "Consigliata ✓" : "Consigliata"}
           </button>
         </div>
       </section>
 
-      {proxyName ? (
-        <div className="rounded-xl border border-card bg-card/20 p-3 text-sm">
-          {proxyName} non ha inserito la formazione. Puoi inserirla tu per vedere il risultato della sua partita: risulterà «inserita da» te e {proxyName} potrà sempre sostituirla.
-        </div>
-      ) : started && (
-        <div className="rounded-xl border border-danger/40 bg-danger/10 p-3 text-sm">
-          La giornata è iniziata: puoi ancora cambiare la formazione, ma la modifica sarà segnalata a tutta la lega.
-        </div>
-      )}
-      {unmatched === scored.length && (
-        <div className="rounded-xl border border-line bg-surface-2 p-3 text-xs text-muted">
-          Nessun giocatore della rosa è ancora abbinato alla fonte dati: la titolarità stimata non è disponibile e la formazione consigliata si basa sui crediti d'asta.
-          {admin ? <> Controlla lo stato in <Link to="/admin" className="underline">Gestione lega → Abbinamenti</Link>.</> : " L'abbinamento avviene da solo dopo la prima sincronizzazione."}
-        </div>
-      )}
-
-      <div className="flex gap-2 overflow-x-auto pb-1" role="radiogroup" aria-label="Modulo">
+      <div className="flex items-center gap-2 overflow-x-auto border-b border-line bg-surface px-3 py-2" role="radiogroup" aria-label="Modulo">
+        <span className="shrink-0 text-xs font-extrabold uppercase tracking-wide text-muted">Modulo</span>
         {cfg.modules.map((m) => (
           <button key={m} role="radio" aria-checked={m === module} onClick={() => changeModule(m)}
-            className={`shrink-0 rounded-full px-3.5 py-1.5 text-sm font-extrabold tabular transition ${m === module ? "bg-brand text-brand-ink shadow dark:bg-accent dark:text-accent-ink" : "shadow-card bg-surface text-muted"}`}>
+            className={`shrink-0 rounded-full px-3 py-1 text-sm font-extrabold tabular transition ${m === module ? "bg-brand text-brand-ink dark:bg-accent dark:text-accent-ink" : "border border-line text-muted"}`}>
             {m.split("").join("-")}
           </button>
         ))}
       </div>
 
-      <div className={`pitch flex flex-col gap-4 rounded-2xl px-1 pt-4 pb-7 ${suggested ? "outline-4 outline-offset-2 outline-card" : ""}`}>
+      <div className="flex flex-col gap-2 px-3 pt-3 empty:hidden">
+        {proxyName ? (
+          <div className="rounded-xl border border-card bg-card/20 p-3 text-sm">
+            {proxyName} non ha inserito la formazione. Puoi inserirla tu per vedere il risultato della sua partita: risulterà «inserita da» te e {proxyName} potrà sempre sostituirla.
+          </div>
+        ) : started && (
+          <div className="rounded-xl border border-danger/40 bg-danger/10 p-3 text-sm">
+            La giornata è iniziata: puoi ancora cambiare la formazione, ma la modifica sarà segnalata a tutta la lega.
+          </div>
+        )}
+        {unmatched === scored.length && (
+          <div className="rounded-xl border border-line bg-surface-2 p-3 text-xs text-muted">
+            Nessun giocatore della rosa è ancora abbinato alla fonte dati: la titolarità stimata non è disponibile e la formazione consigliata si basa sui crediti d'asta.
+            {admin ? <> Controlla lo stato in <Link to="/admin" className="underline">Gestione lega → Abbinamenti</Link>.</> : " L'abbinamento avviene da solo dopo la prima sincronizzazione."}
+          </div>
+        )}
+      </div>
+
+      <div className={`pitch mt-3 flex flex-col gap-3 px-1 pt-4 pb-6 ${suggested ? "outline-4 -outline-offset-4 outline-card" : ""}`}>
         {suggested && (
           <div className="-mt-1 flex justify-center">
             <span className="rounded-full bg-card px-3 py-0.5 text-xs font-bold text-card-ink shadow">★ Formazione consigliata</span>
@@ -498,7 +563,7 @@ function Editor({ teamId, proxyName, round, started, scored, cfg, current, last,
         {rows.map((r) => (
           <div key={r.role} className="flex justify-center gap-1">
             {r.players.map((p) => (
-              <PitchPlayer key={p.id} p={p} badge={badgeOf(p.id)} hot={over === `s:${p.id}`} lifted={drag?.id === p.id} handlers={grab(p.id, () => toReserves(p))} />
+              <PitchPlayer key={p.id} p={p} badge={badgeOf(p.id)} hot={over === `s:${p.id}`} lifted={drag?.id === p.id} handlers={grab(p.id, () => openSheet(p.id))} />
             ))}
             {Array.from({ length: r.empty }, (_, i) => (
               <EmptySlot key={`e${i}`} role={r.role} hot={over === `slot:${r.role}`} onClick={() => setPicking({ role: r.role, target: "starters" })} />
@@ -506,125 +571,160 @@ function Editor({ teamId, proxyName, round, started, scored, cfg, current, last,
           </div>
         ))}
       </div>
-      <p className="-mt-2 px-1 text-[11px] text-muted">Sotto ogni giocatore la titolarità stimata. Trascina un giocatore sul posto di un altro per scambiarli, su uno slot libero o in panchina; tocca un giocatore per mandarlo tra le riserve, uno slot vuoto per scegliere chi schierare.</p>
+      <p className="px-4 pt-1.5 pb-3 text-[11px] text-muted">Tocca un giocatore per spostarlo (titolare, panchina o riserve) o uno slot vuoto per sceglierlo; puoi anche trascinarlo sul posto di un altro.</p>
 
-      {captainOn && (
-        <div className="grid grid-cols-2 gap-3 text-sm">
-          {([["Capitano", captain, setCaptain], ["Vice capitano", vice, setVice]] as const).map(([label, value, setter]) => (
-            <label key={label} className="flex flex-col gap-1">
-              <span className="text-xs font-semibold text-muted">{label}</span>
-              <select className="shadow-card rounded-xl border border-line bg-surface px-3 py-2.5 font-semibold" value={value ?? ""} onChange={(e) => setter(e.target.value || null)}>
-                <option value="">Scegli…</option>
-                {starterRows.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-              </select>
-            </label>
+      <div className="flex flex-col gap-3 px-3 pb-3 empty:hidden">
+        {captainOn && (
+          <div className="grid grid-cols-2 gap-3 text-sm">
+            {([["Capitano", captain, setCaptain], ["Vice capitano", vice, setVice]] as const).map(([label, value, setter]) => (
+              <label key={label} className="flex flex-col gap-1">
+                <span className="text-xs font-semibold text-muted">{label}</span>
+                <select className="rounded-xl border border-line bg-surface px-3 py-2.5 font-semibold" value={value ?? ""} onChange={(e) => setter(e.target.value || null)}>
+                  <option value="">Scegli…</option>
+                  {starterRows.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+                </select>
+              </label>
+            ))}
+          </div>
+        )}
+        {errors.length > 0 && <div className="rounded-xl border border-warn/40 bg-card/20 p-3 text-sm">{errors.map((e) => <div key={e}>{e}</div>)}</div>}
+        {message && <div className={`rounded-xl border-l-4 p-3 text-sm font-medium ${message.ok ? "border-accent bg-accent/10 text-ink" : "border-danger bg-danger/10 text-danger"}`}>{message.text}</div>}
+      </div>
+
+      <section data-zone="bench" className={`bg-surface ${hot("bench")}`}>
+        {sectionHead("In panchina", `${bench.length}/${cfg.benchCount}${cfg.benchPerRole ? ` · ${cfg.benchPerRole.map((n, i) => `${n}${["P", "D", "C", "A"][i]}`).join(" ")}` : ""} · l'ordine conta`)}
+        <ol className="flex flex-col divide-y divide-line">
+          {benchRows.map((p, i) => (
+            <li key={p.id} data-zone={`b:${i}`} className={`flex items-center gap-2 px-4 py-2 ${hot(`b:${i}`)} ${drag?.id === p.id ? "opacity-40" : ""}`}>
+              {playerRow(p, <span className="w-4 shrink-0 text-center text-sm font-extrabold text-muted tabular">{i + 1}</span>)}
+            </li>
           ))}
-        </div>
-      )}
+          {Array.from({ length: Math.max(0, cfg.benchCount - bench.length) }, (_, i) => (
+            <li key={`b${i}`}>
+              <button className="flex w-full items-center gap-2 px-4 py-2 text-left text-sm text-muted hover:bg-surface-2" onClick={() => setPicking({ role: 0, target: "bench" })}>
+                <span className="w-4 shrink-0 text-center text-sm font-extrabold tabular">{bench.length + i + 1}</span>
+                <span className="flex size-9 items-center justify-center rounded-full border-2 border-dashed border-line text-lg font-bold">+</span>
+                <span>Aggiungi panchinaro</span>
+              </button>
+            </li>
+          ))}
+        </ol>
+      </section>
 
-      {errors.length > 0 && <div className="rounded-xl border border-warn/40 bg-card/20 p-3 text-sm">{errors.map((e) => <div key={e}>{e}</div>)}</div>}
-      {message && <div className={`rounded-xl border-l-4 p-3 text-sm font-medium ${message.ok ? "border-accent bg-accent/10 text-ink" : "border-danger bg-danger/10 text-danger"}`}>{message.text}</div>}
+      <section data-zone="reserve" className={`mt-3 bg-surface ${hot("reserve")}`}>
+        {sectionHead("Riserve", `${free.length} non schierati`)}
+        {unmatched > 0 && unmatched < scored.length && canMatch && (
+          <p className="mx-4 mt-2 rounded-lg border border-warn/40 bg-card/20 p-2 text-[11px]">
+            {unmatched === 1 ? "1 giocatore non è abbinato" : `${unmatched} giocatori non sono abbinati`} alla fonte dati (senza titolarità): l'automatico non ha potuto decidere da solo. Tocca «Abbina» per scegliere tra i candidati.
+          </p>
+        )}
+        {!free.length && <Empty>Tutti i giocatori della rosa sono schierati.</Empty>}
+        {ROLES.map((role) => {
+          const list = free.filter((p) => p.role === role).sort((a, b) => b.score - a.score || (b.cost ?? 0) - (a.cost ?? 0));
+          if (!list.length) return null;
+          return (
+            <div key={role}>
+              <div className="flex items-center justify-between px-4 pt-3 pb-1 text-xs text-muted"><span className="text-[13px] font-extrabold text-ink">{ROLE_NAME[role]}</span><span>{startersOf(role).length}/{want[role]} in campo</span></div>
+              <ul className="flex flex-col divide-y divide-line">
+                {list.map((p) => (
+                  <li key={p.id} className={`flex items-center gap-2 px-4 py-2 ${drag?.id === p.id ? "opacity-40" : ""}`}>{playerRow(p)}</li>
+                ))}
+              </ul>
+            </div>
+          );
+        })}
+        <div className="h-3" />
+      </section>
 
-      <div data-zone="bench" className={hot("bench")}>
-        <Card title={`In panchina ${bench.length}/${cfg.benchCount}`}>
-          <p className="mb-2 text-[11px] text-muted">L'ordine conta per le sostituzioni{cfg.benchPerRole ? ` (${cfg.benchPerRole.map((n, i) => `${n} ${["P", "D", "C", "A"][i]}`).join(", ")})` : ""}: trascina un panchinaro per cambiarne la posizione.</p>
-          <ol className="flex flex-col divide-y divide-line">
-            {benchRows.map((p, i) => (
-              <li key={p.id} data-zone={`b:${i}`} className={`flex items-center gap-2 py-1.5 ${hot(`b:${i}`)} ${drag?.id === p.id ? "opacity-40" : ""}`}>
-                <span className="flex size-5 shrink-0 items-center justify-center rounded-full bg-surface-2 text-[11px] font-bold text-muted tabular">{i + 1}</span>
-                <button {...grab(p.id, () => toReserves(p))} className="draggable flex min-w-0 flex-1 cursor-grab items-center gap-2 text-left text-sm" aria-label={`${p.name}: trascina per spostarlo, tocca per mandarlo tra le riserve`}>
-                  <RoleTag role={p.role} />
-                  <span className="truncate font-medium">{p.name}</span><span className="truncate text-xs text-muted">{p.outlook?.opponent ?? ""}</span>
-                </button>
-                {!p.info.ext_id && canMatch ? <MatchButton name={p.name} onClick={() => setAction(p.id)} /> : <StarterPercent percent={p.starterPercent} />}
-                <InfoButton name={p.name} onClick={() => setAction(p.id)} />
-              </li>
-            ))}
-            {Array.from({ length: Math.max(0, cfg.benchCount - bench.length) }, (_, i) => (
-              <li key={`b${i}`} className="py-1.5">
-                <button className="flex w-full items-center gap-2 rounded-lg border border-dashed border-line px-2 py-1.5 text-left text-sm text-muted hover:border-accent" onClick={() => setPicking({ role: 0, target: "bench" })}>
-                  <span className="w-5 text-xs tabular">{bench.length + i + 1}</span><span>Aggiungi panchinaro</span>
-                </button>
-              </li>
-            ))}
-          </ol>
-        </Card>
-      </div>
-
-      <div data-zone="reserve" className={hot("reserve")}>
-        <Card title={`Riserve ${free.length}`}>
-          <p className="mb-2 text-[11px] text-muted">Giocatori della rosa non schierati. Tocca una riserva per schierarla (in campo nel suo ruolo, altrimenti in panchina) o trascinala sul posto di un giocatore; trascina qui uno schierato per toglierlo.</p>
-          {unmatched > 0 && unmatched < scored.length && canMatch && (
-            <p className="mb-2 rounded-lg border border-warn/40 bg-card/20 p-2 text-[11px]">
-              {unmatched === 1 ? "1 giocatore non è abbinato" : `${unmatched} giocatori non sono abbinati`} alla fonte dati (senza titolarità): l'automatico non ha potuto decidere da solo. Tocca «Abbina» per scegliere tra i candidati.
-            </p>
-          )}
-          {!free.length && <Empty>Tutti i giocatori della rosa sono schierati.</Empty>}
-          {ROLES.map((role) => {
-            const list = free.filter((p) => p.role === role).sort((a, b) => b.score - a.score || (b.cost ?? 0) - (a.cost ?? 0));
-            if (!list.length) return null;
-            return (
-              <div key={role} className="mb-3">
-                <div className="-mx-4 mb-1 flex items-center justify-between border-y border-line bg-surface-2 px-4 py-1.5 text-xs text-muted"><span className="flex items-center gap-2 text-[13px] font-bold text-ink"><RoleTag role={role} size={18} />{ROLE_NAME[role]}</span><span>{startersOf(role).length}/{want[role]} in campo</span></div>
-                <ul className="flex flex-col divide-y divide-line">
-                  {list.map((p) => (
-                    <li key={p.id} className={`flex items-center gap-2 py-1.5 text-sm ${drag?.id === p.id ? "opacity-40" : ""}`}>
-                      <button {...grab(p.id, () => addPlayer(p.id))} className="draggable flex min-w-0 flex-1 cursor-grab items-center gap-2 text-left" aria-label={`Schiera ${p.name}`}>
-                        <PlayerAvatar name={p.name} role={p.role} size={32} />
-                        <span className="min-w-0 flex-1">
-                          <span className="block truncate font-medium">{p.name}</span>
-                          <span className="block truncate text-xs text-muted">{[p.info.ext_team, p.outlook?.opponent, statusText(p.outlook)].filter(Boolean).join(" · ")}</span>
-                        </span>
-                      </button>
-                      {!p.info.ext_id && canMatch ? <MatchButton name={p.name} onClick={() => setAction(p.id)} /> : <StarterPercent percent={p.starterPercent} />}
-                      <InfoButton name={p.name} onClick={() => setAction(p.id)} />
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            );
-          })}
-        </Card>
-      </div>
-
-      <div className="sticky bottom-[calc(4.5rem+env(safe-area-inset-bottom))] z-20">
+      <div className="sticky bottom-[calc(4.5rem+env(safe-area-inset-bottom))] z-20 px-3 pt-3">
         <Button variant={started && !proxyName ? "danger" : "card"} className="w-full py-3 text-base shadow-lg" disabled={saving || errors.length > 0} onClick={() => save(false)}>
           {saving ? "Salvataggio…" : proxyName ? `Inserisci per ${proxyName}` : started ? "Salva modifica forzata" : "Salva formazione"}
         </Button>
       </div>
 
       {drag && dragged && (
-        <div className="pointer-events-none fixed z-[60] -translate-x-1/2 -translate-y-1/2 drop-shadow-xl" style={{ left: drag.x, top: drag.y }} aria-hidden>
-          <PlayerAvatar name={dragged.name} role={dragged.role} size={54} />
+        <div className="pointer-events-none fixed z-[60] -translate-x-1/2 -translate-y-1/2" style={{ left: drag.x, top: drag.y }} aria-hidden>
+          <Shirt name={dragged.name} role={dragged.role} size={56} />
         </div>
       )}
 
-      <Sheet open={!!acting} onClose={() => { setAction(null); setMatchFound(null); setMatchQuery(""); }} title={acting?.name ?? ""}>
-        {acting && (
-          <div className="flex flex-col gap-2">
-            <p className="text-xs text-muted">{[ROLE_NAME[acting.role], acting.info.ext_team, acting.outlook?.opponent, statusText(acting.outlook)].filter(Boolean).join(" · ")} · FM stimata {fmt(acting.expectedFantavote, 2)}</p>
-            <p className="text-sm">{stateOf(acting.id) ?? "Tra le riserve"}{badgeOf(acting.id) ? ` · ${badgeOf(acting.id) === "C" ? "capitano" : "vice capitano"}` : ""} · titolarità <StarterPercent percent={acting.starterPercent} /></p>
-            {!acting.info.ext_id && canMatch && (
-              <div className="mt-2 rounded-xl border border-warn/40 bg-card/10 p-3">
-                <p className="mb-2 text-sm font-semibold">Abbina alla fonte dati</p>
-                <p className="mb-2 text-xs text-muted">{candidatesOf(acting).length ? "L'automatico non ha potuto decidere tra questi giocatori: scegli quello giusto." : "Nessun candidato trovato con questo cognome: cerca il giocatore per nome."}</p>
-                <div className="flex flex-wrap gap-1">
-                  {(matchFound ?? candidatesOf(acting)).map((c) => (
-                    <button key={c.id} disabled={matching} onClick={() => assignMatch(acting, c.id, c.name)} className="rounded-lg border border-line bg-surface px-2 py-1 text-xs hover:border-accent disabled:opacity-50">
-                      {c.name} <span className="text-muted">{c.team_name}{c.role ? ` · ${["", "P", "D", "C", "A"][c.role]}` : ""}</span>
-                    </button>
-                  ))}
-                  {matchFound && matchFound.length === 0 && <span className="text-xs text-muted">Nessun giocatore trovato.</span>}
+      <Sheet open={!!acting} onClose={closeSheet} title={acting?.name ?? ""}>
+        {acting && (() => {
+          const at = where(acting.id);
+          const full = choose === "field" ? starterRows.filter((x) => x.role === acting.role) : choose === "bench" ? benchRows.filter((x) => benchSwapOk(acting, x)) : [];
+          const option = (label: string, sub: string, icon: React.ReactNode, onClick: () => void, active = false) => (
+            <button onClick={onClick} className={`flex w-full items-center gap-3 rounded-xl border px-3 py-3 text-left ${active ? "border-accent bg-accent/10" : "border-line bg-surface-2 hover:border-accent"}`}>
+              <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-brand text-white dark:bg-accent dark:text-accent-ink">{icon}</span>
+              <span className="min-w-0 flex-1"><span className="block font-bold">{label}</span><span className="block text-xs text-muted">{sub}</span></span>
+              <span className="text-muted" aria-hidden>›</span>
+            </button>
+          );
+          const goField = () => (fieldRoom(acting) ? toField(acting) : setChoose(choose === "field" ? null : "field"));
+          const goBench = () => (at === "field" ? benchRoomFor(acting.role) : bench.length < cfg.benchCount && benchRoomFor(acting.role)) ? toBenchSpot(acting) : setChoose(choose === "bench" ? null : "bench");
+          const fieldSub = fieldRoom(acting) ? `Nello slot libero dei ${ROLE_NAME[acting.role].toLowerCase()}` : `I ${ROLE_NAME[acting.role].toLowerCase()} sono al completo: scegli chi sostituire`;
+          const benchSub = bench.length < cfg.benchCount && benchRoomFor(acting.role) ? `Al posto ${bench.length + 1} della panchina` : "Panchina piena: scegli al posto di chi";
+          const icons = {
+            field: <svg viewBox="0 0 24 24" className="size-5" fill="none" stroke="currentColor" strokeWidth={2} aria-hidden><rect x="4" y="3" width="16" height="18" rx="2" /><path d="M4 12h16" /><circle cx="12" cy="12" r="2.5" /></svg>,
+            bench: <svg viewBox="0 0 24 24" className="size-5" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" aria-hidden><path d="M3 11h18M5 11v7M19 11v7M4 7h16" /></svg>,
+            reserve: <svg viewBox="0 0 24 24" className="size-5" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" aria-hidden><path d="M12 5v14M5 12l7 7 7-7" /></svg>,
+          };
+          return (
+            <div className="flex flex-col gap-3">
+              <div className="flex items-center gap-3">
+                <Shirt name={acting.name} role={acting.role} size={52} />
+                <div className="min-w-0 flex-1 text-sm">
+                  <p className="font-semibold">{[ROLE_NAME[acting.role].replace(/i$/, "e").replace("Centrocampiste", "Centrocampista"), acting.info.ext_team, acting.outlook?.opponent ? `vs ${acting.outlook.opponent}` : null].filter(Boolean).join(" · ")}</p>
+                  <p className="text-xs text-muted">{[statusText(acting.outlook), `FM stimata ${fmt(acting.expectedFantavote, 2)}`].filter(Boolean).join(" · ")}</p>
+                  <p className="mt-1 flex items-center gap-2 text-xs"><span className="rounded-full bg-surface-2 px-2 py-0.5 font-bold">{at === "field" ? "Titolare" : at === "bench" ? `In panchina (${bench.indexOf(acting.id) + 1})` : "Riserva"}</span><StarterPercent percent={acting.starterPercent} /></p>
                 </div>
-                <form className="mt-2 flex gap-2" onSubmit={(e) => { e.preventDefault(); searchMatch(matchQuery); }}>
-                  <input value={matchQuery} onChange={(e) => setMatchQuery(e.target.value)} placeholder="Cerca per nome…" className="min-w-0 flex-1 rounded-lg border border-line bg-surface px-2 py-1 text-sm" aria-label="Cerca nella fonte dati" />
-                  <Button type="submit" variant="ghost" className="px-3 py-1">Cerca</Button>
-                </form>
               </div>
-            )}
-            <a href={newsSearchUrl(acting.info.ext_name ?? acting.name)} target="_blank" rel="noreferrer" className="text-center text-xs text-accent underline">News</a>
-          </div>
-        )}
+
+              <div className="flex flex-col gap-2">
+                {at !== "field" && option("Titolare in campo", fieldSub, icons.field, goField, choose === "field")}
+                {at !== "bench" && option("In panchina", benchSub, icons.bench, goBench, choose === "bench")}
+                {at !== "reserve" && option("Tra le riserve", "Non schierato in questa giornata", icons.reserve, () => toReserves(acting))}
+              </div>
+
+              {choose && (
+                <div className="rounded-xl border border-line p-2">
+                  <p className="mb-1.5 px-1 text-xs font-bold uppercase tracking-wide text-muted">Al posto di</p>
+                  {!full.length && <p className="px-1 text-sm text-muted">Nessun giocatore sostituibile.</p>}
+                  <ul className="flex flex-col gap-1">
+                    {full.map((x) => (
+                      <li key={x.id}>
+                        <button onClick={() => (choose === "field" ? toField(acting, x.id) : toBenchSpot(acting, x.id))} className="flex w-full items-center gap-3 rounded-lg px-2 py-1.5 text-left hover:bg-surface-2">
+                          <Shirt name={x.name} role={x.role} size={32} />
+                          <span className="min-w-0 flex-1"><span className="block truncate text-sm font-bold">{x.name}</span><span className="block truncate text-xs text-muted">{choose === "bench" ? `Panchina ${bench.indexOf(x.id) + 1} · ` : ""}{[x.info.ext_team, x.outlook?.opponent ? `vs ${x.outlook.opponent}` : null].filter(Boolean).join(" · ")}</span></span>
+                          <StarterPercent percent={x.starterPercent} />
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              {!acting.info.ext_id && canMatch && (
+                <div className="rounded-xl border border-warn/40 bg-card/10 p-3">
+                  <p className="mb-2 text-sm font-semibold">Abbina alla fonte dati</p>
+                  <p className="mb-2 text-xs text-muted">{candidatesOf(acting).length ? "L'automatico non ha potuto decidere tra questi giocatori: scegli quello giusto." : "Nessun candidato trovato con questo cognome: cerca il giocatore per nome."}</p>
+                  <div className="flex flex-wrap gap-1">
+                    {(matchFound ?? candidatesOf(acting)).map((c) => (
+                      <button key={c.id} disabled={matching} onClick={() => assignMatch(acting, c.id, c.name)} className="rounded-lg border border-line bg-surface px-2 py-1 text-xs hover:border-accent disabled:opacity-50">
+                        {c.name} <span className="text-muted">{c.team_name}{c.role ? ` · ${["", "P", "D", "C", "A"][c.role]}` : ""}</span>
+                      </button>
+                    ))}
+                    {matchFound && matchFound.length === 0 && <span className="text-xs text-muted">Nessun giocatore trovato.</span>}
+                  </div>
+                  <form className="mt-2 flex gap-2" onSubmit={(e) => { e.preventDefault(); searchMatch(matchQuery); }}>
+                    <input value={matchQuery} onChange={(e) => setMatchQuery(e.target.value)} placeholder="Cerca per nome…" className="min-w-0 flex-1 rounded-lg border border-line bg-surface px-2 py-1 text-sm" aria-label="Cerca nella fonte dati" />
+                    <Button type="submit" variant="ghost" className="px-3 py-1">Cerca</Button>
+                  </form>
+                </div>
+              )}
+              <a href={newsSearchUrl(acting.info.ext_name ?? acting.name)} target="_blank" rel="noreferrer" className="text-center text-xs text-accent underline">Notizie su {acting.name}</a>
+            </div>
+          );
+        })()}
       </Sheet>
 
       <Sheet open={!!picking} onClose={() => setPicking(null)} title={picking?.target === "bench" ? `Posto ${bench.length + 1} in panchina` : `Slot ${picking ? SINGULAR[picking.role] ?? "" : ""}`}>
@@ -636,7 +736,7 @@ function Editor({ teamId, proxyName, round, started, scored, cfg, current, last,
               {g.players.map((p) => (
                 <li key={p.id} className="flex items-center gap-2">
                   <button onClick={() => pick(p.id)} className="flex min-w-0 flex-1 items-center gap-3 rounded-xl border border-line bg-surface-2 px-3 py-2 text-left hover:border-accent">
-                    <PlayerAvatar name={p.name} role={p.role} size={36} />
+                    <Shirt name={p.name} role={p.role} size={36} />
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-1.5 truncate text-sm font-semibold">
                         {p.name}
@@ -701,17 +801,17 @@ function Editor({ teamId, proxyName, round, started, scored, cfg, current, last,
 function PitchPlayer({ p, badge, hot, lifted, handlers }: { p: Row; badge: "C" | "VC" | null; hot: boolean; lifted: boolean; handlers: Grab }) {
   const low = !Number.isNaN(p.starterPercent) && p.starterPercent < 70;
   return (
-    <button {...handlers} data-zone={`s:${p.id}`} aria-label={`${p.name}: trascina per spostarlo, tocca per mandarlo tra le riserve`}
-      className={`draggable flex w-[72px] cursor-grab flex-col items-center gap-0.5 rounded-xl py-0.5 text-center transition ${hot ? "bg-white/25 ring-2 ring-card" : ""} ${lifted ? "opacity-40" : ""}`}>
+    <button {...handlers} data-zone={`s:${p.id}`} aria-label={`${p.name}: tocca per le opzioni, trascina per spostarlo`}
+      className={`draggable flex w-[74px] cursor-grab flex-col items-center text-center transition ${hot ? "rounded-xl bg-white/25 ring-2 ring-card" : ""} ${lifted ? "opacity-40" : ""}`}>
       <span className="relative">
-        <PlayerAvatar name={p.name} role={p.role} size={46} />
+        <Shirt name={p.name} role={p.role} size={48} />
         {badge && <span className="absolute -right-1.5 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-card px-1 text-[10px] font-extrabold text-card-ink shadow">{badge}</span>}
         {low && <span className="absolute -left-1 -top-1 size-3 rounded-full border-2 border-white bg-danger" title="Titolarità sotto il 70%" />}
       </span>
-      <span className="mt-0.5 w-full truncate rounded-md bg-white px-1 text-[11px] font-extrabold leading-[18px] text-brand shadow">{p.name}</span>
-      <span className="flex items-center gap-1 text-[10px] font-semibold leading-3 text-white/90">
+      <span className="-mt-0.5 w-full truncate rounded bg-white px-1 text-[11px] font-extrabold leading-[18px] text-[#13203b] shadow">{p.name}</span>
+      <span className="mt-0.5 flex items-center gap-1 text-[10px] font-semibold leading-3 text-white">
         <StarterPercent percent={p.starterPercent} />
-        <span className="max-w-[40px] truncate">{p.outlook?.opponent ?? ""}</span>
+        <span className="max-w-[40px] truncate">{p.outlook?.opponent ? `vs ${p.outlook.opponent}` : ""}</span>
       </span>
     </button>
   );
@@ -721,9 +821,9 @@ function PitchPlayer({ p, badge, hot, lifted, handlers }: { p: Row; badge: "C" |
 function EmptySlot({ role, hot, onClick }: { role: number; hot: boolean; onClick: () => void }) {
   const letter = ["", "P", "D", "C", "A"][role];
   return (
-    <button onClick={onClick} data-zone={`slot:${role}`} className={`flex w-[72px] flex-col items-center gap-0.5 rounded-xl py-0.5 text-center text-white transition ${hot ? "bg-white/25 ring-2 ring-card" : ""}`} aria-label={`Slot vuoto ${ROLE_NAME[role]}: scegli`}>
-      <span className="flex size-[46px] items-center justify-center rounded-full border-2 border-dashed border-white/80 bg-white/15 text-xl font-extrabold">+</span>
-      <span className="mt-0.5 w-full rounded-md bg-black/25 px-1 text-[11px] font-extrabold leading-[18px]">{letter} · Scegli</span>
+    <button onClick={onClick} data-zone={`slot:${role}`} className={`flex w-[74px] flex-col items-center text-center text-white transition ${hot ? "rounded-xl bg-white/25 ring-2 ring-card" : ""}`} aria-label={`Slot vuoto ${ROLE_NAME[role]}: scegli`}>
+      <Shirt role={role} size={48} empty />
+      <span className="-mt-0.5 w-full rounded bg-black/30 px-1 text-[11px] font-extrabold leading-[18px]">{letter} · Scegli</span>
     </button>
   );
 }
@@ -731,15 +831,6 @@ function EmptySlot({ role, hot, onClick }: { role: number; hot: boolean; onClick
 /** Abbinamento alla fonte dati (giocatori su cui l'automatico non ha potuto decidere). */
 function MatchButton({ name, onClick }: { name: string; onClick: () => void }) {
   return <button onClick={onClick} className="shrink-0 rounded-full border border-warn/60 bg-card/20 px-2 text-[11px] font-bold leading-4" aria-label={`Abbina ${name} alla fonte dati`}>Abbina</button>;
-}
-
-/** Scheda del giocatore: stato, abbinamento e notizie. */
-function InfoButton({ name, onClick }: { name: string; onClick: () => void }) {
-  return (
-    <button onClick={onClick} className="shrink-0 rounded-full p-1 text-muted hover:bg-surface-2 hover:text-ink" aria-label={`Dettagli di ${name}`}>
-      <svg viewBox="0 0 24 24" className="size-4" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" aria-hidden><circle cx="12" cy="12" r="9" /><path d="M12 11v5M12 7.5v.5" /></svg>
-    </button>
-  );
 }
 
 function move<T>(arr: T[], from: number, to: number): T[] {

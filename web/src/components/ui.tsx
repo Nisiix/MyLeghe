@@ -67,6 +67,23 @@ export function PlayerAvatar({ name, role, size = 44 }: { name: string; role?: n
   );
 }
 
+/**
+ * Maglietta come nelle app di lega, nel colore del ruolo con le iniziali (niente maglie ufficiali dei club).
+ * `empty` = slot libero (sagoma tratteggiata).
+ */
+export function Shirt({ name, role, size = 44, empty = false }: { name?: string; role: number; size?: number; empty?: boolean }) {
+  return (
+    <svg viewBox="0 0 48 48" width={size} height={size} aria-hidden className="shrink-0 drop-shadow-[0_1px_1.5px_rgba(0,0,0,0.3)]">
+      <path d="M17 5 10 8 3 15l5.5 7 3.5-2.6V44h24V19.4l3.5 2.6L45 15l-7-7-7-3c-1.5 3-4 4.6-7 4.6S18.5 8 17 5Z"
+        fill={empty ? "rgba(255,255,255,0.14)" : ROLE_COLOR[role] ?? "#868e96"} stroke={empty ? "#ffffff" : "rgba(0,0,0,0.22)"}
+        strokeWidth={empty ? 1.6 : 1.2} strokeDasharray={empty ? "3 2.5" : undefined} strokeLinejoin="round" />
+      {!empty && <path d="M17 5c1.5 3 4 4.6 7 4.6S29.5 8 31 5" fill="none" stroke="rgba(255,255,255,0.75)" strokeWidth={1.6} />}
+      {empty ? <path d="M24 20v12M18 26h12" stroke="#ffffff" strokeWidth={2.4} strokeLinecap="round" />
+        : <text x="24" y="31.5" textAnchor="middle" fontSize="12.5" fontWeight={800} fill="#ffffff" fontFamily="Archivo, sans-serif">{initials(name ?? "")}</text>}
+    </svg>
+  );
+}
+
 /** Titolarità stimata da FootballLite, con colore per fascia. */
 export function StarterPercent({ percent, threshold = 70 }: { percent: number | null | undefined; threshold?: number }) {
   if (percent === null || percent === undefined || Number.isNaN(percent)) return <span className="text-[10px] text-muted" title="Giocatore non abbinato alla fonte dati">n.d.</span>;
