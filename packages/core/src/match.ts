@@ -99,11 +99,13 @@ export function matchPlayer(rosterName: string, role: Role | undefined, pool: Ca
     .filter((c) => c.score > 0)
     .sort((a, b) => b.score - a.score);
   if (!scored.length) return { id: null, confidence: 0, candidates: [] };
-  const [best, second] = scored;
-  const ambiguous = second && best.score - second.score < 0.1;
+  // Lo stesso giocatore compare due volte nel pool (nome completo e nome breve): l'ambiguità si misura
+  // solo con il miglior candidato che è un giocatore diverso.
+  const best = scored[0];
+  const second = scored.find((c) => c.id !== best.id);
+  const ambiguous = !!second && Math.round((best.score - second.score) * 1000) < 100;
   const confidence = ambiguous ? Math.min(best.score, 0.6) : best.score;
-  // Lo stesso giocatore può comparire due volte nel pool (nome e nome breve): è unico se tutti i candidati hanno il suo id.
-  const unique = scored.every((c) => c.id === best.id);
+  const unique = !second;
   const threshold = unique ? 0.65 : 0.75;
   return { id: confidence >= threshold ? best.id : null, confidence, candidates: scored.slice(0, 5) };
 }

@@ -102,6 +102,30 @@ describe("abbinamento nomi", () => {
     // Cognome unico ma ruolo lontano (D contro A): resta da verificare.
     expect(matchPlayer("Barella", 1, pool2).id).toBeNull();
   });
+
+  it("il nome breve dello stesso giocatore non crea ambiguità", () => {
+    const pool3 = [
+      { id: 40, name: "Guglielmo Vicario", role: 1 as const }, { id: 40, name: "G. Vicario", role: 1 as const },
+      { id: 41, name: "Federico Dimarco", role: 3 as const }, { id: 41, name: "F. Dimarco", role: 3 as const },
+    ];
+    expect(matchPlayer("Vicario", 1, pool3).id).toBe(40);
+    expect(matchPlayer("Vicario", 1, pool3).confidence).toBeGreaterThanOrEqual(0.75);
+    expect(matchPlayer("Dimarco", 2, pool3).id).toBe(41);
+  });
+
+  it("con cognomi uguali decidono l'iniziale del nome e il ruolo", () => {
+    const thurams = [{ id: 20, name: "Marcus Thuram", role: 4 as const }, { id: 21, name: "Khéphren Thuram", role: 3 as const }];
+    expect(matchPlayer("Thuram M.", 4, thurams).id).toBe(20);
+    expect(matchPlayer("Thuram K.", 3, thurams).id).toBe(21);
+    // Senza iniziale decide il ruolo; con lo stesso ruolo e senza iniziale si lascia la scelta all'utente.
+    expect(matchPlayer("Thuram", 4, thurams).id).toBe(20);
+    expect(matchPlayer("Thuram", 3, thurams).id).toBe(21);
+    const same = [{ id: 30, name: "Marco Rossi", role: 2 as const }, { id: 31, name: "Luca Rossi", role: 2 as const }];
+    const r = matchPlayer("Rossi", 2, same);
+    expect(r.id).toBeNull();
+    expect(r.candidates.map((c) => c.id).sort()).toEqual([30, 31]);
+    expect(matchPlayer("Rossi L.", 2, same).id).toBe(31);
+  });
 });
 
 describe("titolarità e formazione consigliata", () => {

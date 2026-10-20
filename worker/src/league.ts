@@ -166,7 +166,7 @@ league.get("/league", async (c) => {
   if (!l) return c.json({ error: "Lega non più presente: entra di nuovo con il codice invito." }, 401);
   const teams = await c.env.DB.prepare("SELECT id, name, position, spent FROM teams WHERE league_id = ? ORDER BY position").bind(s.lid).all<TeamRow>();
   const roster = await c.env.DB.prepare(
-    `SELECT r.team_id, r.slot, r.name, r.role, r.cost, r.ext_id, r.confidence, p.name AS ext_name, p.team_name AS ext_team
+    `SELECT r.team_id, r.slot, r.name, r.role, r.cost, r.ext_id, r.confidence, r.candidates, p.name AS ext_name, p.team_name AS ext_team
      FROM roster r JOIN teams t ON t.id = r.team_id LEFT JOIN players p ON p.id = r.ext_id
      WHERE t.league_id = ? ORDER BY r.team_id, r.slot`,
   ).bind(s.lid).all();
@@ -176,6 +176,32 @@ league.get("/league", async (c) => {
     roster: roster.results ?? [],
     me: { teamIds: s.tids, admin: s.admin, userId: s.uid ?? null },
   });
+});
+
+/**
+ * Abbinamento manuale di un giocatore della propria rosa (o di qualunque rosa per l'admin), tra i candidati
+ * proposti o cercando per nome: per i casi in cui l'abbinamento automatico non può decidere da solo.
+ */
+league.put("/league/roster/:teamId/:slot", async (c) => {
+  const s = c.get("session");
+  const teamId = Number(c.req.param("teamId")), slot = Number(c.req.param("slot"));
+  if (!s.admin && !s.tids.includes(teamId)) return c.json({ error: "Puoi abbinare solo i giocatori della tua rosa." }, 403);
+  const own = await c.env.DB.prepare("SELECT 1 FROM teams WHERE id = ? AND league_id = ?").bind(teamId, s.lid).first();
+  if (!own) return c.json({ error: "Squadra non trovata" }, 404);
+  const { extId } = await c.req.json<{ extId: number | null }>();
+  if (extId !== null) {
+    const p = await c.env.DB.prepare("SELECT 1 FROM players WHERE id = ?").bind(Number(extId)).first();
+    if (!p) return c.json({ error: "Giocatore della fonte dati non trovato" }, 404);
+  }
+  await c.env.DB.prepare("UPDATE roster SET ext_id = ?, confidence = ? WHERE team_id = ? AND slot = ?").bind(extId, extId === null ? 0 : 1, teamId, slot).run();
+  return c.json({ ok: true });
+});
+
+/** Ricerca dei giocatori di Serie A nella fonte dati (per l'abbinamento manuale). */
+league.get("/league/players", async (c) => {
+  const q = `%${(c.req.query("q") ?? "").trim()}%`;
+  const rows = await c.env.DB.prepare("SELECT id, name, role, team_name FROM players WHERE name LIKE ? OR short_name LIKE ? ORDER BY name LIMIT 20").bind(q, q).all();
+  return c.json(rows.results ?? []);
 });
 
 // ---- Admin: impostazioni, import rose, abbinamenti, codici squadra ------------------------------

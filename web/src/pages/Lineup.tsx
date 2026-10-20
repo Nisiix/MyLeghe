@@ -43,6 +43,7 @@ export function LineupPage() {
 }
 
 type Picking = { role: number; replace: string | null; target: "starters" | "bench" };
+type Candidate = { id: number; name: string; team_name: string; role?: number | null };
 
 /**
  * Inserimento della formazione come in Leghe Fantacalcio: modulo, campo con gli slot del modulo, panchina in ordine,
@@ -80,6 +81,10 @@ function Editor({ teamId, proxyName, round, started, scored, cfg, current, unmat
   const [pasteError, setPasteError] = useState<string | null>(null);
   const [confirmForce, setConfirmForce] = useState(false);
   const [saving, setSaving] = useState(false);
+  // Abbinamento manuale alla fonte dati (per i giocatori su cui l'automatico non ha potuto decidere).
+  const [matchQuery, setMatchQuery] = useState("");
+  const [matchFound, setMatchFound] = useState<Candidate[] | null>(null);
+  const [matching, setMatching] = useState(false);
   const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(
     savedMessage ? { ok: true, text: savedMessage } : current ? null : { ok: true, text: "Ti proponiamo la formazione consigliata: controllala e salvala." },
   );
@@ -214,6 +219,25 @@ function Editor({ teamId, proxyName, round, started, scored, cfg, current, unmat
     setMessage(null);
   }
 
+  const candidatesOf = (p: Row): Candidate[] => {
+    try { return (JSON.parse(p.info.candidates ?? "[]") as { id: number; name: string; teamName?: string }[]).map((c) => ({ id: c.id, name: c.name, team_name: c.teamName ?? "" })); } catch { return []; }
+  };
+  async function assignMatch(p: Row, extId: number, label: string) {
+    setMatching(true);
+    try {
+      await api(`/league/roster/${teamId}/${p.info.slot}`, { method: "PUT", body: { extId } });
+      await qc.invalidateQueries({ queryKey: ["league"] });
+      await qc.invalidateQueries({ queryKey: ["outlook"] });
+      setAction(null); setMatchFound(null); setMatchQuery("");
+      setMessage({ ok: true, text: `${p.name} abbinato a ${label}: titolarità e dati della fonte sono ora disponibili.` });
+    } catch (e) { setMessage({ ok: false, text: (e as Error).message }); } finally { setMatching(false); }
+  }
+  async function searchMatch(text: string) {
+    if (text.trim().length < 3) return;
+    try { setMatchFound(await api<Candidate[]>(`/league/players?q=${encodeURIComponent(text.trim())}`)); } catch (e) { setMessage({ ok: false, text: (e as Error).message }); }
+  }
+  const canMatch = !proxyName || admin;
+
   async function save(forced = false) {
     setSaving(true);
     setMessage(null);
@@ -340,6 +364,11 @@ function Editor({ teamId, proxyName, round, started, scored, cfg, current, unmat
 
       <Card title="Rosa">
         <p className="mb-2 text-[11px] text-muted">Tocca un giocatore per schierarlo (in campo nel suo ruolo, altrimenti in panchina) o per toglierlo dalla formazione.</p>
+        {unmatched > 0 && unmatched < scored.length && canMatch && (
+          <p className="mb-2 rounded-lg border border-warn/40 bg-card/20 p-2 text-[11px]">
+            {unmatched === 1 ? "1 giocatore non è abbinato" : `${unmatched} giocatori non sono abbinati`} alla fonte dati (senza titolarità): l'automatico non ha potuto decidere da solo. Tocca «Abbina» per scegliere tra i candidati.
+          </p>
+        )}
         {ROLES.map((role) => {
           const list = scored.filter((p) => p.role === role).sort((a, b) => Number(!!stateOf(b.id)) - Number(!!stateOf(a.id)) || b.score - a.score || (b.cost ?? 0) - (a.cost ?? 0));
           if (!list.length) return null;
@@ -358,7 +387,9 @@ function Editor({ teamId, proxyName, round, started, scored, cfg, current, unmat
                           <span className="block truncate text-xs text-muted">{[p.info.ext_team, p.outlook?.opponent, statusText(p.outlook)].filter(Boolean).join(" · ")}</span>
                         </span>
                       </button>
-                      <StarterPercent percent={p.starterPercent} />
+                      {!p.info.ext_id && canMatch
+                        ? <button onClick={() => setAction(p.id)} className="rounded-full border border-warn/60 bg-card/20 px-2 text-[11px] font-bold leading-4" aria-label={`Abbina ${p.name} alla fonte dati`}>Abbina</button>
+                        : <StarterPercent percent={p.starterPercent} />}
                       <span className={`w-20 shrink-0 text-right text-xs font-semibold ${st ? (st === "Titolare" ? "text-accent" : "text-muted") : "text-accent"}`}>{st ?? "Schiera"}</span>
                     </li>
                   );
@@ -369,7 +400,7 @@ function Editor({ teamId, proxyName, round, started, scored, cfg, current, unmat
         })}
       </Card>
 
-      <Sheet open={!!acting} onClose={() => setAction(null)} title={acting?.name ?? ""}>
+      <Sheet open={!!acting} onClose={() => { setAction(null); setMatchFound(null); setMatchQuery(""); }} title={acting?.name ?? ""}>
         {acting && (
           <div className="flex flex-col gap-2">
             <p className="text-xs text-muted">{[ROLE_NAME[acting.role], acting.info.ext_team, acting.outlook?.opponent, statusText(acting.outlook)].filter(Boolean).join(" · ")} · FM stimata {fmt(acting.expectedFantavote, 2)}</p>
@@ -378,7 +409,25 @@ function Editor({ teamId, proxyName, round, started, scored, cfg, current, unmat
             {starters.includes(acting.id) && <Button variant="ghost" onClick={() => { setAction(null); setPicking({ role: acting.role, replace: acting.id, target: "starters" }); }}>Sostituisci con…</Button>}
             {starters.includes(acting.id) && <Button variant="ghost" onClick={() => toBench(acting.id)}>Sposta in panchina</Button>}
             {bench.includes(acting.id) && startersOf(acting.role).length < want[acting.role] && <Button variant="ghost" onClick={() => { setBench(bench.filter((x) => x !== acting.id)); setStarters([...starters, acting.id]); setAction(null); }}>Metti in campo</Button>}
-            <Button variant="danger" onClick={() => removePlayer(acting.id)}>Togli dalla formazione</Button>
+            {(starters.includes(acting.id) || bench.includes(acting.id)) && <Button variant="danger" onClick={() => removePlayer(acting.id)}>Togli dalla formazione</Button>}
+            {!acting.info.ext_id && canMatch && (
+              <div className="mt-2 rounded-xl border border-warn/40 bg-card/10 p-3">
+                <p className="mb-2 text-sm font-semibold">Abbina alla fonte dati</p>
+                <p className="mb-2 text-xs text-muted">{candidatesOf(acting).length ? "L'automatico non ha potuto decidere tra questi giocatori: scegli quello giusto." : "Nessun candidato trovato con questo cognome: cerca il giocatore per nome."}</p>
+                <div className="flex flex-wrap gap-1">
+                  {(matchFound ?? candidatesOf(acting)).map((c) => (
+                    <button key={c.id} disabled={matching} onClick={() => assignMatch(acting, c.id, c.name)} className="rounded-lg border border-line bg-surface px-2 py-1 text-xs hover:border-accent disabled:opacity-50">
+                      {c.name} <span className="text-muted">{c.team_name}{c.role ? ` · ${["", "P", "D", "C", "A"][c.role]}` : ""}</span>
+                    </button>
+                  ))}
+                  {matchFound && matchFound.length === 0 && <span className="text-xs text-muted">Nessun giocatore trovato.</span>}
+                </div>
+                <form className="mt-2 flex gap-2" onSubmit={(e) => { e.preventDefault(); searchMatch(matchQuery); }}>
+                  <input value={matchQuery} onChange={(e) => setMatchQuery(e.target.value)} placeholder="Cerca per nome…" className="min-w-0 flex-1 rounded-lg border border-line bg-surface px-2 py-1 text-sm" aria-label="Cerca nella fonte dati" />
+                  <Button type="submit" variant="ghost" className="px-3 py-1">Cerca</Button>
+                </form>
+              </div>
+            )}
             <a href={newsSearchUrl(acting.info.ext_name ?? acting.name)} target="_blank" rel="noreferrer" className="text-center text-xs text-accent underline">News</a>
           </div>
         )}

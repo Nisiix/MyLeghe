@@ -11,6 +11,8 @@ export interface Team { id: number; name: string; position: number; spent: numbe
 export interface RosterPlayer {
   team_id: number; slot: number; name: string; role: Role; cost: number;
   ext_id: number | null; confidence: number; ext_name: string | null; ext_team: string | null;
+  /** Candidati dell'abbinamento automatico (JSON), quando non ha potuto decidere da solo. */
+  candidates: string | null;
 }
 export interface LeagueData {
   league: { id: string; name: string; config: LeagueConfig };

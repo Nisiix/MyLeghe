@@ -264,7 +264,7 @@ function Unmatched() {
   return (
     <Card title="Abbinamenti" action={<button className="text-sm font-semibold text-accent" onClick={rematch}>Riprova automatico</button>}>
       <SourcesNote />
-      <p className="mb-3 text-sm text-muted">Giocatori del file non abbinati con certezza ai giocatori di Serie A della fonte dati: senza abbinamento non hanno titolarità né voti stimati. L'abbinamento automatico riparte da solo a ogni aggiornamento giornaliero dei giocatori.</p>
+      <p className="mb-3 text-sm text-muted">Giocatori del file non abbinati con certezza ai giocatori di Serie A della fonte dati: senza abbinamento non hanno titolarità né voti stimati. L'automatico abbina per cognome e, tra omonimi, per iniziale del nome e ruolo; qui scegli tu nei casi in cui non ha potuto decidere. Riparte da solo a ogni aggiornamento giornaliero dei giocatori; ogni utente può abbinare i propri dalla pagina Formazione.</p>
       {rematchMsg && <p className="mb-3 text-xs text-accent">{rematchMsg}</p>}
       {q.isLoading ? <Spinner /> : !q.data?.length ? <Empty>Tutti i giocatori sono abbinati.</Empty> : (
         <ul className="flex flex-col divide-y divide-line">

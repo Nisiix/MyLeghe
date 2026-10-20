@@ -18,7 +18,7 @@ App (PWA, anche come APK Android) per seguire la propria lega di fantacalcio. Ro
 
 | Dato | Fonte |
 |---|---|
-| Rose, calendario e risultati ufficiali della lega | File esportati dall'admin (es. «Gestione rose» e calendario di Leghe Fantacalcio), letti sul suo dispositivo. I giocatori vengono abbinati alla fonte dati in automatico (anche dopo l'aggiornamento giornaliero dei giocatori di Serie A); la pagina Admin mostra lo stato della fonte e gli abbinamenti da verificare |
+| Rose, calendario e risultati ufficiali della lega | File esportati dall'admin (es. «Gestione rose» e calendario di Leghe Fantacalcio), letti sul suo dispositivo. I giocatori vengono abbinati alla fonte dati in automatico per cognome e, tra omonimi, per iniziale del nome e ruolo (anche dopo l'aggiornamento giornaliero dei giocatori di Serie A); quelli su cui l'automatico non può decidere si abbinano a mano tra i candidati, dalla pagina Formazione («Abbina») o dalla pagina Admin |
 | Calendario, orari e classifica di Serie A | [football-data.org](https://www.football-data.org), piano Free |
 | Giocatori, indisponibili, formazioni probabili e ufficiali, statistiche per giocatore e cronaca | [BSD – Bzzoiro Sports Data](https://sports.bzzoiro.com), piano Free, secondo la sua licenza dati |
 | Titolarità, formazione consigliata, voti live | **Stime calcolate da FootballLite**: non sono voti ufficiali |
