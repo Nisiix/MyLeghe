@@ -87,6 +87,21 @@ describe("abbinamento nomi", () => {
     expect(r.id).toBeNull();
     expect(r.candidates.length).toBeGreaterThan(1);
   });
+
+  it("abbina il cognome senza iniziale anche se la fonte dà una posizione diversa (es. esterno D/C)", () => {
+    const pool2 = [
+      { id: 10, name: "Federico Dimarco", role: 3 as const },
+      { id: 11, name: "Nicolò Barella", role: 3 as const },
+      { id: 12, name: "Davide Frattesi", role: 3 as const },
+      ...pool,
+    ];
+    expect(matchPlayer("Dimarco", 2, pool2).id).toBe(10);
+    expect(matchPlayer("Frattesi", 4, pool2).id).toBe(12);
+    // Portiere contro giocatore di movimento con lo stesso cognome: vince il ruolo giusto, senza ambiguità.
+    expect(matchPlayer("Martinez", 4, pool2).id).toBe(1);
+    // Cognome unico ma ruolo lontano (D contro A): resta da verificare.
+    expect(matchPlayer("Barella", 1, pool2).id).toBeNull();
+  });
 });
 
 describe("titolarità e formazione consigliata", () => {

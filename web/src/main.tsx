@@ -13,7 +13,17 @@ import { LivePage } from "./pages/Live";
 import { SettingsPage } from "./pages/Settings";
 import "./styles.css";
 
-registerSW({ immediate: true });
+// Aggiornamento dell'app: oltre al controllo all'apertura, si ricontrolla quando l'app torna in primo piano
+// e ogni ora, così dopo un deploy la versione nuova arriva anche a chi tiene l'app sempre aperta.
+registerSW({
+  immediate: true,
+  onRegisteredSW(_url, registration) {
+    if (!registration) return;
+    const check = () => { if (document.visibilityState === "visible") registration.update().catch(() => {}); };
+    document.addEventListener("visibilitychange", check);
+    setInterval(check, 60 * 60 * 1000);
+  },
+});
 
 const queryClient = new QueryClient({ defaultOptions: { queries: { retry: 1, refetchOnWindowFocus: true } } });
 

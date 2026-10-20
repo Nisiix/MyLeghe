@@ -13,7 +13,7 @@ export interface CandidatePlayer {
 
 export interface MatchResult {
   id: number | null;
-  /** 0–1: sopra 0.75 l'abbinamento è considerato sicuro. */
+  /** 0–1: da 0.75 l'abbinamento è considerato sicuro (da 0.65 se il cognome compare in un solo giocatore della fonte). */
   confidence: number;
   candidates: { id: number; name: string; teamName?: string; score: number }[];
 }
@@ -79,11 +79,20 @@ export function scoreCandidate(rosterName: string, candidate: CandidatePlayer, r
   } else if (others.length === 0) {
     score += 0.1; // nome d'arte di una sola parola (es. "Wesley")
   }
-  if (role && candidate.role) score += candidate.role === role ? 0.05 : -0.15;
-  return Math.max(0, Math.min(1, score));
+  // Ruolo: i ruoli del fantacalcio non coincidono sempre con la posizione della fonte (es. esterno D/C),
+  // quindi uno scarto di un ruolo pesa poco; portiere contro giocatore di movimento o D contro A pesa molto.
+  if (role && candidate.role) {
+    const gap = Math.abs(candidate.role - role);
+    score += gap === 0 ? 0.05 : gap === 1 && role !== 1 && candidate.role !== 1 ? -0.05 : -0.2;
+  }
+  // Arrotondato: le somme in virgola mobile non devono far mancare una soglia per un millesimo.
+  return Math.round(Math.max(0, Math.min(1, score)) * 1000) / 1000;
 }
 
-/** Miglior candidato per un nome della rosa; se due candidati sono quasi pari la confidenza scende. */
+/**
+ * Miglior candidato per un nome della rosa; se due candidati sono quasi pari la confidenza scende.
+ * Un cognome che compare in un solo giocatore della fonte basta anche con ruolo diverso (soglia più bassa).
+ */
 export function matchPlayer(rosterName: string, role: Role | undefined, pool: CandidatePlayer[]): MatchResult {
   const scored = pool
     .map((c) => ({ id: c.id, name: c.name, teamName: c.teamName, score: scoreCandidate(rosterName, c, role) }))
@@ -93,5 +102,8 @@ export function matchPlayer(rosterName: string, role: Role | undefined, pool: Ca
   const [best, second] = scored;
   const ambiguous = second && best.score - second.score < 0.1;
   const confidence = ambiguous ? Math.min(best.score, 0.6) : best.score;
-  return { id: confidence >= 0.75 ? best.id : null, confidence, candidates: scored.slice(0, 5) };
+  // Lo stesso giocatore può comparire due volte nel pool (nome e nome breve): è unico se tutti i candidati hanno il suo id.
+  const unique = scored.every((c) => c.id === best.id);
+  const threshold = unique ? 0.65 : 0.75;
+  return { id: confidence >= threshold ? best.id : null, confidence, candidates: scored.slice(0, 5) };
 }
