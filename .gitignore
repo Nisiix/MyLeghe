@@ -26,3 +26,8 @@ Thumbs.db
 video/renders/
 video/.hyperframes/
 *.mp4.tmp
+
+# Progetto Android generato da Bubblewrap (si rigenera da android/twa-manifest.json)
+android/*
+!android/twa-manifest.json
+!android/README.md

@@ -1,0 +1,180 @@
+<!doctype html>
+<html lang="it">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>FootballLite: la tua lega, la tua formazione, il live</title>
+    <meta name="description" content="App gratuita per seguire la propria lega di fantacalcio: titolarità stimata, formazione consigliata, live e simulazione del risultato con il regolamento della lega." />
+    <meta name="theme-color" content="#083d27" />
+    <link rel="icon" href="assets/icon.svg" type="image/svg+xml" />
+    <style>
+      /* Archivo: SIL Open Font License 1.1 (assets/fonts/OFL.txt) */
+      @font-face {
+        font-family: "Archivo";
+        src: url("assets/fonts/Archivo-Variable.woff2") format("woff2");
+        font-weight: 100 900;
+        font-stretch: 62% 125%;
+        font-display: swap;
+      }
+      :root {
+        --gesso: #f4f6ef;
+        --inchiostro: #0a1f17;
+        --erba: #0d5c3a;
+        --erba-scura: #083d27;
+        --cartellino: #ffc928;
+        --rosso: #e5383b;
+        --linea: #d3dccd;
+        --muto: #4f6157;
+      }
+      * { box-sizing: border-box; margin: 0; padding: 0; }
+      html { scroll-behavior: smooth; }
+      body { font-family: "Archivo", system-ui, sans-serif; font-stretch: 100%; background: var(--gesso); color: var(--inchiostro); line-height: 1.5; -webkit-font-smoothing: antialiased; }
+      a { color: inherit; }
+      :focus-visible { outline: 3px solid var(--cartellino); outline-offset: 3px; }
+      .wrap { width: min(1120px, 100% - 32px); margin-inline: auto; }
+      .display { font-stretch: 66%; font-weight: 800; letter-spacing: -0.01em; line-height: 0.92; }
+
+      header.top { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 18px 0; }
+      .brand { display: flex; align-items: center; gap: 10px; font-size: 26px; text-decoration: none; }
+      .brand img { width: 36px; height: 36px; }
+      nav a { font-weight: 600; text-decoration: none; margin-left: 18px; font-size: 15px; }
+      nav a:hover { text-decoration: underline; }
+
+      .card-btn { display: inline-block; background: var(--cartellino); color: var(--inchiostro); font-weight: 800; padding: 14px 22px; border-radius: 12px; text-decoration: none; box-shadow: 4px 4px 0 var(--inchiostro); transform: rotate(-1.5deg); transition: transform 0.15s; }
+      .card-btn:hover { transform: rotate(0deg); }
+      .ghost-btn { display: inline-block; font-weight: 700; padding: 13px 20px; border-radius: 12px; border: 2px solid var(--inchiostro); text-decoration: none; }
+
+      /* Hero: a sinistra il titolo, a destra il campo con le percentuali */
+      .hero { display: grid; grid-template-columns: 1.05fr 1fr; gap: 48px; align-items: center; padding: 40px 0 72px; }
+      .hero h1 { font-size: clamp(56px, 9vw, 112px); }
+      .hero p.lead { font-size: 20px; max-width: 34em; margin: 22px 0 30px; color: #24382f; }
+      .ctas { display: flex; flex-wrap: wrap; gap: 16px; align-items: center; }
+      .pitch { position: relative; aspect-ratio: 4 / 5; border-radius: 22px; background: repeating-linear-gradient(0deg, #0d5c3a 0 12.5%, #0f6340 12.5% 25%); border: 3px solid rgba(244, 246, 239, 0.4); display: flex; flex-direction: column; justify-content: space-around; padding: 18px 8px; overflow: hidden; }
+      .pitch::before { content: ""; position: absolute; left: 8%; right: 8%; top: 50%; border-top: 3px solid rgba(244, 246, 239, 0.35); }
+      .pitch::after { content: ""; position: absolute; left: 50%; top: 50%; width: 30%; aspect-ratio: 1; transform: translate(-50%, -50%); border: 3px solid rgba(244, 246, 239, 0.35); border-radius: 50%; }
+      .prow { position: relative; z-index: 1; display: flex; justify-content: center; gap: clamp(6px, 2vw, 18px); }
+      .pl { display: flex; flex-direction: column; align-items: center; gap: 4px; color: var(--gesso); font-size: 12px; font-weight: 700; }
+      .av { width: 44px; height: 44px; border-radius: 50%; background: var(--gesso); color: var(--inchiostro); display: grid; place-items: center; font-weight: 800; font-size: 14px; }
+      .pct { border-radius: 10px; padding: 0 7px; font-size: 12px; font-weight: 800; }
+      .hi { background: var(--gesso); color: var(--erba); }
+      .mid { background: var(--cartellino); color: var(--inchiostro); }
+      .lo { background: var(--rosso); color: #fff; }
+
+      section.block { padding: 72px 0; border-top: 2px solid var(--linea); }
+      section.block h2 { font-size: clamp(40px, 6vw, 68px); margin-bottom: 18px; }
+      section.block .intro { max-width: 40em; color: #24382f; font-size: 18px; margin-bottom: 32px; }
+
+      .video { background: var(--erba-scura); border-radius: 20px; padding: clamp(10px, 2vw, 18px); }
+      .video video { display: block; width: 100%; border-radius: 12px; background: #000; aspect-ratio: 16 / 9; }
+
+      .features { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 48px; }
+      .feature { padding: 22px 0; border-top: 1px solid var(--linea); }
+      .feature h3 { font-size: 30px; margin-bottom: 6px; }
+      .feature p { color: #24382f; }
+      .feature.wide { grid-column: 1 / -1; }
+
+      ol.steps { list-style: none; counter-reset: s; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 24px; }
+      ol.steps li { counter-increment: s; background: #fff; border: 1px solid var(--linea); border-radius: 16px; padding: 22px; }
+      ol.steps li::before { content: counter(s); display: block; font-stretch: 66%; font-weight: 800; font-size: 56px; line-height: 1; color: var(--erba); margin-bottom: 8px; }
+      ol.steps h3 { font-size: 20px; margin-bottom: 6px; font-stretch: 100%; }
+
+      .sources { display: grid; grid-template-columns: 1fr 1fr; gap: 24px 48px; }
+      .sources dt { font-weight: 800; }
+      .sources dd { color: #24382f; margin-bottom: 12px; }
+      .note { margin-top: 28px; padding: 18px; border-left: 6px solid var(--cartellino); background: #fff; border-radius: 0 12px 12px 0; }
+
+      footer { padding: 40px 0 56px; border-top: 2px solid var(--linea); color: var(--muto); font-size: 14px; }
+      footer p + p { margin-top: 8px; }
+
+      @media (max-width: 860px) {
+        .hero { grid-template-columns: 1fr; padding-top: 16px; }
+        .pitch { max-width: 420px; }
+        .features, .sources { grid-template-columns: 1fr; }
+        ol.steps { grid-template-columns: 1fr; }
+        nav a.hide-sm { display: none; }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        html { scroll-behavior: auto; }
+        .card-btn { transition: none; }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <header class="top">
+        <a class="brand display" href="#"><img src="assets/icon.svg" alt="" />FootballLite</a>
+        <nav aria-label="Principale">
+          <a class="hide-sm" href="#video">Video</a>
+          <a class="hide-sm" href="#installa">Installa</a>
+          <a href="https://footballlite.fantalite-worker.workers.dev" id="app-link-top">Apri l'app</a>
+        </nav>
+      </header>
+
+      <main>
+        <section class="hero" aria-labelledby="titolo">
+          <div>
+            <h1 id="titolo" class="display">La formazione giusta, prima del fischio.</h1>
+            <p class="lead">FootballLite è un'app gratuita per la tua lega di fantacalcio. Vedi la titolarità stimata di ogni giocatore, schiera con la formazione consigliata e segui il live della giornata con il regolamento della tua lega.</p>
+            <div class="ctas">
+              <a class="card-btn" href="https://footballlite.fantalite-worker.workers.dev" id="app-link">Apri l'app</a>
+              <a class="ghost-btn" href="download/FootballLite.apk" download>Scarica l'APK per Android</a>
+            </div>
+          </div>
+          <div class="pitch" role="img" aria-label="Esempio di formazione con la percentuale di titolarità sotto ogni giocatore">
+            <div class="prow"><div class="pl"><span class="av">RV</span><span class="pct hi">90%</span></div><div class="pl"><span class="av">MS</span><span class="pct hi">85%</span></div><div class="pl"><span class="av">BR</span><span class="pct hi">80%</span></div></div>
+            <div class="prow"><div class="pl"><span class="av">GT</span><span class="pct hi">90%</span></div><div class="pl"><span class="av">LP</span><span class="pct hi">85%</span></div><div class="pl"><span class="av">SR</span><span class="pct mid">60%</span></div><div class="pl"><span class="av">TS</span><span class="pct hi">80%</span></div></div>
+            <div class="prow"><div class="pl"><span class="av">BN</span><span class="pct hi">90%</span></div><div class="pl"><span class="av">FR</span><span class="pct mid">55%</span></div><div class="pl"><span class="av">DM</span><span class="pct lo">20%</span></div></div>
+            <div class="prow"><div class="pl"><span class="av">VL</span><span class="pct hi">90%</span></div></div>
+          </div>
+        </section>
+
+        <section class="block" id="video" aria-labelledby="video-t">
+          <h2 id="video-t" class="display">Come funziona, in 70 secondi</h2>
+          <p class="intro">Dall'ingresso nella lega con il codice invito fino alla simulazione del risultato. Squadre e giocatori del video sono inventati.</p>
+          <div class="video">
+            <video controls preload="metadata" playsinline poster="assets/video-poster.jpg">
+              <source src="assets/footballlite-tutorial.mp4" type="video/mp4" />
+              Il tuo browser non riproduce il video: <a href="assets/footballlite-tutorial.mp4">scaricalo qui</a>.
+            </video>
+          </div>
+        </section>
+
+        <section class="block" aria-labelledby="cosa">
+          <h2 id="cosa" class="display">Solo quello che serve</h2>
+          <div class="features">
+            <div class="feature"><h3 class="display">Tabellone della giornata</h3><p>La tua partita contro l'avversario del calendario, il conto alla rovescia al primo calcio d'inizio, chi ha già schierato.</p></div>
+            <div class="feature"><h3 class="display">Titolarità stimata</h3><p>Sotto ogni giocatore la probabilità di partire titolare, da formazioni probabili, indisponibili e ultime partite.</p></div>
+            <div class="feature"><h3 class="display">Formazione consigliata</h3><p>Modulo, undici, panchina e capitano scelti tra i moduli ammessi dalla tua lega.</p></div>
+            <div class="feature"><h3 class="display">Live e simulazione</h3><p>Punteggio parziale di tutte le partite della giornata e «Simula risultato», con voti ipotetici modificabili.</p></div>
+            <div class="feature wide"><h3 class="display">Il regolamento della tua lega</h3><p>Soglie gol, bonus e malus per ruolo, sostituzioni, capitano, modificatori di difesa, centrocampo, portiere e attacco, fattore campo: l'admin li imposta come nella lega originale.</p></div>
+          </div>
+        </section>
+
+        <section class="block" id="installa" aria-labelledby="installa-t">
+          <h2 id="installa-t" class="display">Installala in un minuto</h2>
+          <ol class="steps">
+            <li><h3>Android</h3><p>Scarica <a href="download/FootballLite.apk" download>l'APK</a> e aprilo. Se il telefono lo chiede, consenti l'installazione da questa fonte.</p></li>
+            <li><h3>iPhone</h3><p>Apri <a href="https://footballlite.fantalite-worker.workers.dev" id="app-link-ios">l'app</a> in Safari, tocca Condividi e poi «Aggiungi a schermata Home».</p></li>
+            <li><h3>Entra nella lega</h3><p>Inserisci il codice invito ricevuto dall'admin e scegli la tua squadra. Oppure crea una lega e diventane admin.</p></li>
+          </ol>
+        </section>
+
+        <section class="block" aria-labelledby="dati">
+          <h2 id="dati" class="display">Da dove arrivano i dati</h2>
+          <dl class="sources">
+            <div><dt>Rose e calendario</dt><dd>File esportati dall'admin della lega e importati nell'app.</dd></div>
+            <div><dt>Calendario e classifica di Serie A</dt><dd><a href="https://www.football-data.org">football-data.org</a>, piano gratuito.</dd></div>
+            <div><dt>Giocatori, indisponibili, formazioni e statistiche</dt><dd><a href="https://sports.bzzoiro.com">BSD – Bzzoiro Sports Data</a>, piano gratuito.</dd></div>
+            <div><dt>Titolarità, formazione consigliata e voti live</dt><dd>Stime calcolate da FootballLite con un modello proprio: non sono voti ufficiali.</dd></div>
+          </dl>
+          <p class="note">FootballLite non è affiliata a Leghe Fantacalcio® né a Fantacalcio S.r.l. e non usa le loro app, API o pagine. I risultati ufficiali si aggiornano reimportando il calendario della lega.</p>
+        </section>
+      </main>
+
+      <footer>
+        <p>Codice sorgente su <a href="https://github.com/Nisiix/MyLeghe">GitHub</a>. Font Archivo con SIL Open Font License 1.1.</p>
+        <p>Nessuna foto o logo di terzi: squadre e giocatori sono rappresentati da iniziali.</p>
+      </footer>
+    </div>
+  </body>
+</html>
