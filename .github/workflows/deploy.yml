@@ -1,7 +1,7 @@
 # Pubblica il Worker (API + app web) su Cloudflare.
-# Una tantum: Settings → Secrets and variables → Actions → New repository secret
+# Una tantum: Settings → Secrets and variables → Actions, scheda Secrets (consigliata) oppure Variables:
 #   CLOUDFLARE_API_TOKEN   token API con permessi Workers Scripts:Edit, D1:Edit, Workers KV/Assets
-#   CLOUDFLARE_ACCOUNT_ID  ID dell'account Cloudflare
+# L'ID dell'account è in worker/wrangler.toml (account_id); CLOUDFLARE_ACCOUNT_ID, se impostato, lo sostituisce.
 name: Deploy Cloudflare
 
 on:
@@ -27,14 +27,20 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     env:
-      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN || vars.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID || vars.CLOUDFLARE_ACCOUNT_ID || 'f6322840eddef8b0b8305e4f5a5b101a' }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: npm
+      - name: Controllo token Cloudflare
+        run: |
+          if [ -z "$CLOUDFLARE_API_TOKEN" ]; then
+            echo "::error::CLOUDFLARE_API_TOKEN non trovato né tra i Secrets né tra le Variables del repository (Settings → Secrets and variables → Actions)."
+            exit 1
+          fi
       - run: npm ci
       - run: npm test
       - run: npm run typecheck
