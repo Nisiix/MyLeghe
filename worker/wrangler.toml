@@ -1,0 +1,30 @@
+name = "footballlite"
+main = "src/index.ts"
+compatibility_date = "2026-10-01"
+compatibility_flags = ["nodejs_compat"]
+
+# L'app web (build di ../web) è servita dallo stesso Worker: un solo dominio, niente CORS.
+[assets]
+directory = "../web/dist"
+not_found_handling = "single-page-application"
+run_worker_first = ["/api/*"]
+
+# Sincronizzazione delle fonti con licenza e promemoria: ogni 10 minuti.
+[triggers]
+crons = ["*/10 * * * *"]
+
+[[d1_databases]]
+binding = "DB"
+database_name = "footballlite"
+database_id = "2fb3b3f8-a574-4212-86b9-6e98ab98e9d0"
+migrations_dir = "migrations"
+
+[vars]
+VAPID_SUBJECT = "https://footballlite.fantalite-worker.workers.dev"
+
+# Segreti (npx wrangler secret put NOME --name footballlite; in locale nel file .dev.vars):
+#   SETUP_CODE            codice per creare leghe e lanciare la sincronizzazione manuale
+#   SESSION_SECRET        chiave per firmare le sessioni
+#   FOOTBALL_DATA_TOKEN   token football-data.org (piano Free)
+#   BSD_TOKEN             token BSD sports.bzzoiro.com (piano Free)
+#   VAPID_PUBLIC_KEY / VAPID_PRIVATE_KEY   chiavi Web Push

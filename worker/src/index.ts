@@ -1,0 +1,40 @@
+// FootballLite: solo rose importate dalla lega e fonti con licenza (football-data.org, BSD).
+// Nessun accesso a LegheFC o a fantacalcio.it.
+
+import { Hono } from "hono";
+import type { AppEnv } from "./auth";
+import type { Env } from "./env";
+import { league } from "./league";
+import { notify, runNotifications } from "./notify";
+import { outlook } from "./outlook";
+import { SourceError } from "./sources";
+import { runSync } from "./sync";
+
+const app = new Hono<AppEnv>().basePath("/api");
+
+app.onError((err, c) => {
+  const status = err instanceof SourceError ? 502 : 500;
+  console.error(err.message);
+  return c.json({ error: err.message }, status);
+});
+
+app.get("/health", (c) => c.json({ ok: true }));
+app.route("/", league);
+app.route("/", outlook);
+app.route("/", notify);
+
+/** Sincronizzazione manuale (solo con il codice di setup), utile al primo avvio. */
+app.post("/setup/sync", async (c) => {
+  if (!c.env.SETUP_CODE || c.req.header("x-setup-code") !== c.env.SETUP_CODE) return c.json({ error: "Non autorizzato" }, 401);
+  return c.json(await runSync(c.env));
+});
+
+export default {
+  fetch: app.fetch,
+  async scheduled(_event: ScheduledController, env: Env, ctx: ExecutionContext) {
+    ctx.waitUntil((async () => {
+      try { await runSync(env); } catch (e) { console.error("sync", (e as Error).message); }
+      try { await runNotifications(env); } catch (e) { console.error("notifiche", (e as Error).message); }
+    })());
+  },
+} satisfies ExportedHandler<Env>;

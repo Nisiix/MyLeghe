@@ -1,0 +1,28 @@
+# Materiale proprietario LegheFC: mai nel repo pubblico
+apk/
+*.apk
+*.xapk
+*-decompiled/
+re/
+
+# Node
+node_modules/
+dist/
+.env
+.env.*
+!.env.example
+
+# OS / IDE
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Segreti locali del Worker
+.dev.vars
+.wrangler/
+
+# Render e cache locali
+video/renders/
+video/.hyperframes/
+*.mp4.tmp

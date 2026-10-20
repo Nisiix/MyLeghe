@@ -1,0 +1,19 @@
+{
+  "name": "footballlite",
+  "private": true,
+  "version": "0.1.0",
+  "description": "FootballLite: app per la tua lega di fantacalcio (rose importate, titolarità stimata, live e simulazione)",
+  "workspaces": [
+    "packages/core",
+    "worker",
+    "web"
+  ],
+  "scripts": {
+    "dev:worker": "npm run dev -w worker",
+    "dev:web": "npm run dev -w web",
+    "build": "npm run build -w web",
+    "test": "npm test -w packages/core",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "deploy": "npm run build -w web && npm run deploy -w worker"
+  }
+}

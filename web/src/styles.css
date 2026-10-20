@@ -1,0 +1,88 @@
+@import "tailwindcss";
+
+/* Archivo (SIL Open Font License 1.1, vedi /fonts/OFL.txt): titoli condensati, testo a larghezza normale. */
+@font-face {
+  font-family: "Archivo";
+  src: url("/fonts/Archivo-Variable.woff2") format("woff2");
+  font-weight: 100 900;
+  font-stretch: 62% 125%;
+  font-display: swap;
+}
+
+/*
+  Identità FootballLite: il campo e il tabellone della domenica.
+  Gesso e inchiostro per la base, erba per il campo e le azioni, cartellino giallo solo per l'azione chiave,
+  rosso cartellino solo per i rischi.
+*/
+@theme {
+  --color-bg: #f4f6ef;
+  --color-surface: #ffffff;
+  --color-surface-2: #e9eee4;
+  --color-line: #d3dccd;
+  --color-ink: #0a1f17;
+  --color-muted: #56665d;
+  --color-accent: #0d5c3a;
+  --color-accent-ink: #f4f6ef;
+  --color-pitch: #0d5c3a;
+  --color-pitch-deep: #083d27;
+  --color-chalk: #f4f6ef;
+  --color-card: #ffc928;
+  --color-card-ink: #0a1f17;
+  --color-warn: #b7791f;
+  --color-danger: #e5383b;
+  --color-info: #1f6fb2;
+  --font-sans: "Archivo", ui-sans-serif, system-ui, sans-serif;
+}
+
+/* Campo di notte: stessi ruoli, tinte invertite. */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --color-bg: #071a12;
+    --color-surface: #0c2419;
+    --color-surface-2: #12301f;
+    --color-line: #1f4130;
+    --color-ink: #eef3ea;
+    --color-muted: #9db3a6;
+    --color-accent: #4cc38a;
+    --color-accent-ink: #04140c;
+    --color-pitch: #0f5132;
+    --color-pitch-deep: #0a3a24;
+    --color-warn: #f2b84b;
+    --color-info: #6cb4ee;
+  }
+}
+
+html, body, #root { height: 100%; }
+body {
+  margin: 0;
+  background: var(--color-bg);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+  font-stretch: 100%;
+  -webkit-font-smoothing: antialiased;
+  -webkit-tap-highlight-color: transparent;
+  overscroll-behavior-y: none;
+}
+
+/* Tipografia da tabellone per titoli e numeri importanti. */
+.scoreboard { font-stretch: 68%; font-weight: 800; letter-spacing: -0.01em; }
+.tabular { font-variant-numeric: tabular-nums; }
+
+/* Campo visto dall'alto: strisce di taglio e linee di gesso. */
+.pitch {
+  background:
+    linear-gradient(rgba(244, 246, 239, 0.22), rgba(244, 246, 239, 0.22)) center / 100% 2px no-repeat,
+    radial-gradient(circle at 50% 50%, transparent 58px, rgba(244, 246, 239, 0.22) 59px, rgba(244, 246, 239, 0.22) 61px, transparent 62px),
+    repeating-linear-gradient(0deg, rgba(255, 255, 255, 0.04) 0 48px, transparent 48px 96px),
+    var(--color-pitch);
+  border: 2px solid rgba(244, 246, 239, 0.3);
+}
+
+:focus-visible { outline: 3px solid var(--color-card); outline-offset: 2px; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation: none !important; transition: none !important; }
+}
+
+.safe-bottom { padding-bottom: max(1rem, env(safe-area-inset-bottom)); }
+.safe-top { padding-top: max(0.75rem, env(safe-area-inset-top)); }
