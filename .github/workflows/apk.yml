@@ -146,7 +146,8 @@ jobs:
           git commit -m "APK Android $(jq -r .appVersionName android/twa-manifest.json) compilato da GitHub Actions"
           # Versione e icone del manifest sono calcolate a ogni build: non vanno nel repository.
           git checkout -- android/twa-manifest.json
-          git pull --rebase origin main
+          # Se nel frattempo un'altra build ha pubblicato il suo APK, vale quello appena compilato (più recente).
+          git pull --rebase -X theirs origin main
           git push origin HEAD:main
           echo "published=true" >> "$GITHUB_OUTPUT"
           # Il commit del bot non avvia i workflow sul push: il deploy del Worker (nuova impronta) si avvia a mano.
