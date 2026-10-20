@@ -3,7 +3,7 @@
 // (100 richieste al giorno). Fornisce il motivo dell'assenza ("Knee Injury", "Suspended"…) e se il giocatore è in dubbio;
 // non fornisce il rientro previsto. I dati BSD già presenti non vengono mai sovrascritti.
 
-import { matchPlayer, normalizeName, type CandidatePlayer } from "@footballlite/core";
+import { injuryReasonIt, matchPlayer, normalizeName, type CandidatePlayer } from "@footballlite/core";
 import type { Env } from "./env";
 import { kvRead, kvSet } from "./schedule";
 import { afGet } from "./sources";
@@ -49,25 +49,8 @@ export function mapTeam(afName: string, bsdTeams: string[]): string | null {
   return best?.name ?? null;
 }
 
-/** Motivo in italiano, leggibile dall'utente; le diciture non note restano come arrivano dalla fonte. */
-const REASONS: Record<string, string> = {
-  "knee injury": "infortunio al ginocchio", "ankle injury": "infortunio alla caviglia", "hamstring injury": "lesione al bicipite femorale",
-  "thigh injury": "infortunio alla coscia", "calf injury": "infortunio al polpaccio", "muscle injury": "infortunio muscolare",
-  "groin injury": "infortunio all'inguine", "back injury": "infortunio alla schiena", "shoulder injury": "infortunio alla spalla",
-  "foot injury": "infortunio al piede", "hip injury": "infortunio all'anca", "achilles tendon injury": "infortunio al tendine d'Achille",
-  "knock": "botta", "illness": "malattia", "suspended": "squalificato", "red card": "squalificato per espulsione",
-  "yellow cards": "squalificato per somma di ammonizioni", "coach's decision": "scelta tecnica", "national selection": "impegno con la nazionale",
-  "lacking match fitness": "non al meglio della condizione", "virus": "virus", "broken nose": "frattura al naso", "fractured": "frattura",
-  "cruciate ligament": "rottura del legamento crociato", "acl": "rottura del legamento crociato", "concussion": "trauma cranico",
-};
-export function italianReason(reason: string | null | undefined): string | null {
-  const r = (reason ?? "").trim();
-  if (!r) return null;
-  const key = r.toLowerCase();
-  if (REASONS[key]) return REASONS[key];
-  for (const [en, it] of Object.entries(REASONS)) if (key.includes(en)) return it;
-  return r;
-}
+/** Motivo in italiano, leggibile dall'utente (regole condivise in core). */
+export const italianReason = injuryReasonIt;
 
 /**
  * Indisponibili della stagione da API-Football (una richiesta), limitati alle giornate indicate: per ogni giocatore

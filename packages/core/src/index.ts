@@ -8,3 +8,4 @@ export * from "./calendar";
 export * from "./vote";
 export * from "./calibrate";
 export * from "./paste";
+export * from "./injury";

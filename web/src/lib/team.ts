@@ -1,7 +1,7 @@
 // Unione di rosa importata, stima di titolarità e calcolo della giornata con il regolamento della lega.
 
 import {
-  computeMatch, computeTeam, noLineupScore, playerLiveScore, scorePlayers,
+  computeMatch, computeTeam, injuryReasonIt, noLineupScore, playerLiveScore, scorePlayers,
   type LeagueConfig, type MatchScore, type PlayerLiveScore, type ScoredPlayer, type TeamScore,
 } from "@footballlite/core";
 import type { CalendarRow, LeagueData, LiveData, Lineup, Outlook, RosterPlayer } from "./data";
@@ -136,7 +136,7 @@ export function availabilityText(o?: Outlook): string {
 /** Dettaglio dell'indisponibilità: motivo e rientro previsto, oppure l'avviso che non si conoscono. */
 export function injuryDetail(o: Outlook): string {
   const parts: string[] = [];
-  if (o.reason) parts.push(o.reason);
+  if (o.reason) parts.push(injuryReasonIt(o.reason) ?? o.reason);
   if (o.expectedReturn) parts.push(`rientro previsto ${formatReturn(o.expectedReturn)}`);
   if (!parts.length) return "Al momento non si conoscono i dettagli dell'infortunio o i tempi di recupero.";
   return parts.join(" · ") + ".";

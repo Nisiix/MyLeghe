@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import { Button, Card, Empty, ErrorBox, RoleTag, Spinner, StarterPercent, TeamBadge, fmt, formatCountdown, useNow } from "../components/ui";
+import { AvailabilityIcon, Button, Card, Empty, ErrorBox, RoleTag, Spinner, StarterPercent, TeamBadge, fmt, formatCountdown, useNow } from "../components/ui";
 import { useCalendar, useLeague, useLineups, useLive, useOutlook, useRound, type Round } from "../lib/data";
 import { useSession } from "../lib/session";
 import { injuryDetail, leagueMatches, matchCalc, myMatch, rosterOf, teamCalc } from "../lib/team";
@@ -134,7 +134,7 @@ function LeagueDayCard({ round }: { round: Round }) {
           const dot = (id: number) => round.phase === "upcoming" && <span title={inserted.has(id) ? "Formazione inserita" : "Formazione non inserita"} className={`size-2 shrink-0 rounded-full ${inserted.has(id) ? "bg-accent" : "bg-danger/60"}`} />;
           return (
             <li key={`${m.league_day}-${m.home_team_id}`} className={`grid grid-cols-[1fr_auto_1fr] items-center gap-2 py-2.5 text-sm ${mine ? "font-semibold" : ""}`}>
-              <span className="flex min-w-0 items-center gap-2"><span className="truncate">{names.get(m.home_team_id)}</span>{dot(m.home_team_id)}</span>
+              <span className="flex min-w-0 items-center gap-2">{dot(m.home_team_id)}<span className="truncate">{names.get(m.home_team_id)}</span></span>
               <span className="tabular text-center">
                 {m.home_goals !== null ? <><b>{m.home_goals} - {m.away_goals}</b><span className="block text-[10px] text-muted">{fmt(m.home_points)} – {fmt(m.away_points)}</span></> : (() => {
                   const r = estimate(m);
@@ -155,36 +155,31 @@ function LeagueDayCard({ round }: { round: Round }) {
   );
 }
 
-/** Giocatori della mia rosa indisponibili, in dubbio o con titolarità stimata bassa. */
+/** Infortunati della mia rosa (e giocatori in dubbio), con il dettaglio dell'infortunio. */
 function RiskCard() {
   const s = useSession();
   const league = useLeague();
   const outlook = useOutlook();
   if (!s?.myTeamId || !league.data) return null;
-  if (outlook.isLoading) return <Card title="La tua rosa"><Spinner /></Card>;
+  if (outlook.isLoading) return <Card title="Lista infortunati"><Spinner /></Card>;
   const roster = rosterOf(league.data, s.myTeamId);
-  const risky = roster
+  const injured = roster
     .map((p) => ({ p, o: p.ext_id ? outlook.data?.players[p.ext_id] : undefined }))
-    .filter(({ o }) => o && (o.unavailable || o.doubtful || o.starterPercent < 50))
-    .sort((a, b) => (a.o!.starterPercent - b.o!.starterPercent));
+    .filter(({ o }) => o && (o.unavailable === "injury" || (!o.unavailable && o.doubtful)))
+    .sort((a, b) => Number(!!b.o!.unavailable) - Number(!!a.o!.unavailable) || a.p.role - b.p.role);
   const unmatched = roster.filter((p) => !p.ext_id).length;
   return (
-    <Card title="La tua rosa: da tenere d'occhio">
-      {!risky.length ? <Empty>Nessun indisponibile o titolare a rischio secondo le stime.</Empty> : (
+    <Card title="Lista infortunati">
+      {!injured.length ? <Empty>Nessun infortunato nella tua rosa.</Empty> : (
         <ul className="flex flex-col gap-2">
-          {risky.slice(0, 8).map(({ p, o }) => (
+          {injured.map(({ p, o }) => (
             <li key={p.slot} className="text-sm">
               <div className="flex items-center gap-2">
                 <RoleTag role={p.role} />
                 <span className="flex-1 truncate">{p.name}</span>
-                <span className="text-xs text-muted">{o!.unavailable === "injury" ? "Infortunato" : o!.unavailable === "suspension" ? "Squalificato" : o!.unavailable ? "Indisponibile" : o!.doubtful ? "In dubbio" : ""}</span>
-                <StarterPercent percent={o!.starterPercent} />
+                {o!.unavailable ? <AvailabilityIcon unavailable={o!.unavailable} size={18} /> : <><AvailabilityIcon doubtful={o!.doubtful} /><StarterPercent percent={o!.starterPercent} /></>}
               </div>
-              {(o!.unavailable || o!.doubtful) && (
-                <p className="mt-0.5 pl-7 text-[11px] leading-snug text-muted">
-                  {injuryDetail(o!)}{o!.statusUpdatedAt ? ` Verificato il ${new Date(o!.statusUpdatedAt).toLocaleDateString("it-IT", { day: "numeric", month: "short" })}.` : ""}
-                </p>
-              )}
+              <p className="mt-0.5 pl-7 text-[11px] leading-snug text-muted">{injuryDetail(o!)}</p>
             </li>
           ))}
         </ul>

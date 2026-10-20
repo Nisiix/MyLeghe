@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
-  DEFAULT_CONFIG, dueReminder, goalsFromPoints, matchPlayer, normalizeConfig, parseCsv, parseRosterGrid,
+  DEFAULT_CONFIG, dueReminder, injuryReasonIt, goalsFromPoints, matchPlayer, normalizeConfig, parseCsv, parseRosterGrid,
   parseCalendarGrid, parseLineupText, playerLiveScore, computeTeam, statVote, subRolesFromLineup, voteEligibility, fitCalibration, computeMatch, matchGoals, noLineupScore, scorePlayers, starterDrops, starterProbability, suggestLineup, validateLineup,
   type Cell, type RosterEntry,
 } from "../src";
@@ -506,5 +506,17 @@ Politano`;
   it("non confonde l'iniziale del nome con il ruolo", () => {
     const r = parseLineupText("Adams C.\nMartinez L.\nRamos G", roster, cfg);
     expect(r.starters).toEqual(["20", "23", "18"]);
+  });
+});
+
+describe("motivo dell'infortunio in italiano", () => {
+  it("traduce le diciture inglesi delle fonti", () => {
+    expect(injuryReasonIt("Knee Injury")).toBe("infortunio al ginocchio");
+    expect(injuryReasonIt("Hamstring")).toBe("lesione al bicipite femorale");
+    expect(injuryReasonIt("Yellow Cards")).toBe("squalificato per somma di ammonizioni");
+    expect(injuryReasonIt("Suspended")).toBe("squalificato");
+    expect(injuryReasonIt("Illness")).toBe("malattia");
+    expect(injuryReasonIt("Lesione al polpaccio")).toBe("Lesione al polpaccio");
+    expect(injuryReasonIt("")).toBeNull();
   });
 });
