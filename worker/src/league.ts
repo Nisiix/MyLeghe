@@ -215,6 +215,14 @@ league.put("/league/admin/settings", async (c) => {
   return c.json({ config });
 });
 
+/** Nuovo codice invito (il precedente smette di valere): mostrato all'admin per condividerlo, sul server resta solo l'hash. */
+league.post("/league/admin/invite", async (c) => {
+  const s = c.get("session");
+  const leagueCode = newCode(8);
+  await c.env.DB.prepare("UPDATE leagues SET code_hash = ? WHERE id = ?").bind(await sha256(leagueCode), s.lid).run();
+  return c.json({ leagueCode });
+});
+
 /** Profili utente della lega (username, squadra collegata, ultimo accesso), per l'admin. */
 league.get("/league/admin/users", async (c) => {
   const s = c.get("session");

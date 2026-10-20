@@ -20,10 +20,14 @@ export interface MatchResult {
 
 const WILD = "?";
 
+/** Lettere che la scomposizione Unicode non riduce a una lettera latina (ð di Guðmundsson, ø di Ødegaard…). */
+const SPECIAL: Record<string, string> = { "ð": "d", "Ð": "d", "þ": "th", "Þ": "th", "ø": "o", "Ø": "o", "æ": "ae", "Æ": "ae", "œ": "oe", "Œ": "oe", "ß": "ss", "ł": "l", "Ł": "l", "đ": "d", "Đ": "d", "ħ": "h", "Ħ": "h", "ı": "i", "ŀ": "l" };
+
 /** Minuscole, senza accenti né punteggiatura; "�" diventa un jolly. */
 export function normalizeName(s: string): string {
   return s
     .replace(/�/g, WILD)
+    .replace(/[ðÐþÞøØæÆœŒßłŁđĐħĦıŀ]/g, (ch) => SPECIAL[ch] ?? ch)
     .normalize("NFD")
     .replace(/[̀-ͯ]/g, "")
     .toLowerCase()

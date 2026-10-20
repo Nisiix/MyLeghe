@@ -133,6 +133,20 @@ export function availabilityText(o?: Outlook): string {
   return "";
 }
 
+/** Dettaglio dell'indisponibilità: motivo e rientro previsto, oppure l'avviso che non si conoscono. */
+export function injuryDetail(o: Outlook): string {
+  const parts: string[] = [];
+  if (o.reason) parts.push(o.reason);
+  if (o.expectedReturn) parts.push(`rientro previsto ${formatReturn(o.expectedReturn)}`);
+  if (!parts.length) return "Al momento non si conoscono i dettagli dell'infortunio o i tempi di recupero.";
+  return parts.join(" · ") + ".";
+}
+
+function formatReturn(v: string): string {
+  const t = Date.parse(v);
+  return Number.isNaN(t) ? v : new Date(t).toLocaleDateString("it-IT", { day: "numeric", month: "long" });
+}
+
 export function outlookStatus(o?: Outlook): string {
   if (!o) return "Non abbinato alla fonte dati";
   if (o.unavailable === "injury") return "Infortunato";

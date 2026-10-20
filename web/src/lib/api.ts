@@ -76,6 +76,7 @@ export interface AccessTeam { id: number; name: string; username: string | null 
 export async function enterLeague(leagueCode: string, adminCode?: string): Promise<LeagueAccess> {
   const r = await api<LeagueAccess>("/session", { method: "POST", body: { leagueCode, adminCode: adminCode || undefined } });
   try { localStorage.setItem("footballlite.leagueCode", leagueCode); } catch { /* ignora */ }
+  rememberInviteCode(r.league.id, leagueCode);
   session.set({ token: r.token, leagueToken: r.token, league: r.league, admin: r.admin, myTeamId: null });
   return r;
 }
@@ -89,6 +90,7 @@ export async function accessTeams(): Promise<AccessTeam[]> {
 export async function createLeague(name: string): Promise<{ leagueCode: string; adminCode: string }> {
   const r = await api<{ league: { id: string; name: string }; leagueCode: string; adminCode: string; token: string }>("/leagues", { method: "POST", body: { name, acceptAppTerms: true } });
   session.set({ token: r.token, leagueToken: r.token, league: r.league, admin: true, myTeamId: null });
+  rememberInviteCode(r.league.id, r.leagueCode);
   return { leagueCode: r.leagueCode, adminCode: r.adminCode };
 }
 
@@ -120,6 +122,20 @@ export async function linkTeam(teamId: number): Promise<void> {
 export async function unlinkTeam(): Promise<void> {
   const r = await api<{ token: string }>("/session/team", { method: "DELETE" });
   session.update({ token: r.token, myTeamId: null });
+}
+
+/** Codice invito della lega conosciuto su questo dispositivo (per il link di invito). */
+export function rememberInviteCode(leagueId: string, code: string): void {
+  try { localStorage.setItem(`footballlite.invite.${leagueId}`, code.trim().toUpperCase()); } catch { /* ignora */ }
+}
+export function savedInviteCode(leagueId: string): string | null {
+  try { return localStorage.getItem(`footballlite.invite.${leagueId}`); } catch { return null; }
+}
+/** Admin: nuovo codice invito (il precedente smette di valere); viene ricordato su questo dispositivo. */
+export async function regenerateInvite(leagueId: string): Promise<string> {
+  const r = await api<{ leagueCode: string }>("/league/admin/invite", { method: "POST", body: {} });
+  rememberInviteCode(leagueId, r.leagueCode);
+  return r.leagueCode;
 }
 
 export function savedLeagueCode(): string {

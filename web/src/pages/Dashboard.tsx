@@ -2,7 +2,7 @@ import { Link } from "react-router-dom";
 import { Button, Card, Empty, ErrorBox, RoleTag, Spinner, StarterPercent, TeamBadge, fmt, formatCountdown, useNow } from "../components/ui";
 import { useCalendar, useLeague, useLineups, useLive, useOutlook, useRound, type Round } from "../lib/data";
 import { useSession } from "../lib/session";
-import { leagueMatches, matchCalc, myMatch, rosterOf, teamCalc } from "../lib/team";
+import { injuryDetail, leagueMatches, matchCalc, myMatch, rosterOf, teamCalc } from "../lib/team";
 
 export function Dashboard() {
   const s = useSession();
@@ -173,11 +173,18 @@ function RiskCard() {
       {!risky.length ? <Empty>Nessun indisponibile o titolare a rischio secondo le stime.</Empty> : (
         <ul className="flex flex-col gap-2">
           {risky.slice(0, 8).map(({ p, o }) => (
-            <li key={p.slot} className="flex items-center gap-2 text-sm">
-              <RoleTag role={p.role} />
-              <span className="flex-1 truncate">{p.name} <span className="text-xs text-muted">{o!.opponent ?? ""}</span></span>
-              <span className="text-xs text-muted">{o!.unavailable === "injury" ? "Infortunato" : o!.unavailable === "suspension" ? "Squalificato" : o!.unavailable ? "Indisponibile" : o!.doubtful ? "In dubbio" : ""}</span>
-              <StarterPercent percent={o!.starterPercent} />
+            <li key={p.slot} className="text-sm">
+              <div className="flex items-center gap-2">
+                <RoleTag role={p.role} />
+                <span className="flex-1 truncate">{p.name}</span>
+                <span className="text-xs text-muted">{o!.unavailable === "injury" ? "Infortunato" : o!.unavailable === "suspension" ? "Squalificato" : o!.unavailable ? "Indisponibile" : o!.doubtful ? "In dubbio" : ""}</span>
+                <StarterPercent percent={o!.starterPercent} />
+              </div>
+              {(o!.unavailable || o!.doubtful) && (
+                <p className="mt-0.5 pl-7 text-[11px] leading-snug text-muted">
+                  {injuryDetail(o!)}{o!.statusUpdatedAt ? ` Verificato il ${new Date(o!.statusUpdatedAt).toLocaleDateString("it-IT", { day: "numeric", month: "short" })}.` : ""}
+                </p>
+              )}
             </li>
           ))}
         </ul>

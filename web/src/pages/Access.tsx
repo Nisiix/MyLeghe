@@ -4,6 +4,7 @@ import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { Button, Card, ErrorBox, TeamBadge } from "../components/ui";
 import { acceptAppTerms, accessTeams, ApiError, appTermsAccepted, createLeague, enterLeague, linkTeam, loginProfile, registerProfile, savedLeagueCode, type AccessTeam, type LeagueAccess } from "../lib/api";
 import { session, useLeagues, useSession } from "../lib/session";
+import { InviteShare } from "../components/Invite";
 
 const codeInput = "rounded-xl border border-line bg-surface px-3 py-3 uppercase tracking-widest outline-none focus:border-accent";
 const textInput = "rounded-xl border border-line bg-surface px-3 py-3 outline-none focus:border-accent";
@@ -77,7 +78,9 @@ export function Access() {
 
 function EnterCode({ onEntered, onBack }: { onEntered: (a: LeagueAccess) => void; onBack: () => void }) {
   const navigate = useNavigate();
-  const [leagueCode, setLeagueCode] = useState(savedLeagueCode());
+  const [params] = useSearchParams();
+  // Dal link di invito il codice arriva già compilato.
+  const [leagueCode, setLeagueCode] = useState(params.get("codice")?.toUpperCase() ?? savedLeagueCode());
   const [adminCode, setAdminCode] = useState("");
   const [terms, setTerms] = useState(appTermsAccepted());
   const [error, setError] = useState<unknown>(null);
@@ -247,6 +250,7 @@ function ChooseTeam({ teams, admin, notice }: { teams: AccessTeam[]; admin: bool
 
 function CreateLeague({ onBack }: { onBack: () => void }) {
   const navigate = useNavigate();
+  const s = useSession();
   const [name, setName] = useState("");
   const [terms, setTerms] = useState(appTermsAccepted());
   const [error, setError] = useState<unknown>(null);
@@ -268,7 +272,8 @@ function CreateLeague({ onBack }: { onBack: () => void }) {
           <dt className="text-muted">Codice invito</dt><dd className="font-mono font-bold tracking-widest">{codes.leagueCode}</dd>
           <dt className="text-muted">Codice admin</dt><dd className="font-mono font-bold tracking-widest">{codes.adminCode}</dd>
         </dl>
-        <p className="mb-4 text-xs text-muted">Il codice invito lo condividi con i partecipanti. Il codice admin serve a te (o a un altro admin) per gestire la lega da un altro dispositivo. Ora importa rose, calendario e regolamento: senza rose e calendario la lega non è utilizzabile dagli altri.</p>
+        <p className="mb-4 text-xs text-muted">Il codice admin serve a te (o a un altro admin) per gestire la lega da un altro dispositivo. Ora importa rose, calendario e regolamento: senza rose e calendario la lega non è utilizzabile dagli altri.</p>
+        {s && <div className="mb-4"><p className="mb-2 text-sm font-bold">Invita i partecipanti</p><InviteShare leagueId={s.league.id} leagueName={s.league.name} admin initialCode={codes.leagueCode} /></div>}
         <Button variant="card" className="w-full" onClick={() => navigate("/admin", { replace: true })}>Vai alla gestione della lega</Button>
       </Card>
     );

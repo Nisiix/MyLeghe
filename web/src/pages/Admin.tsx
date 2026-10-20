@@ -1,13 +1,16 @@
 import { MIN_CALIBRATION_SAMPLES, parseCalendarGrid, parseRosterGrid, type CalendarImport, type Calibration, type ImportResult, type LeagueConfig } from "@footballlite/core";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
+import { InviteShare } from "../components/Invite";
 import { RulesEditor } from "../components/RulesEditor";
 import { Button, Card, Empty, ErrorBox, RoleTag, Spinner } from "../components/ui";
 import { api } from "../lib/api";
 import { readGrid } from "../lib/files";
 import { useLeague } from "../lib/data";
+import { useSession } from "../lib/session";
 
 export function AdminPage() {
+  const s = useSession();
   const league = useLeague();
   if (league.isLoading) return <Spinner />;
   if (league.error) return <ErrorBox error={league.error} />;
@@ -16,6 +19,10 @@ export function AdminPage() {
     <div className="flex flex-col gap-4">
       <h1 className="px-1 text-2xl font-extrabold leading-none">Gestione lega</h1>
       <SourceTermsCard />
+      <Card title="Invita i partecipanti">
+        <p className="mb-3 text-sm text-muted">Condividi il link o il codice invito su WhatsApp, Telegram o dove preferisci.</p>
+        {s && <InviteShare leagueId={s.league.id} leagueName={s.league.name} admin />}
+      </Card>
       <RosterImport config={league.data.league.config} />
       <CalendarImportCard />
       <Unmatched />

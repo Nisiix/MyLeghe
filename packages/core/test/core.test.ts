@@ -103,6 +103,13 @@ describe("abbinamento nomi", () => {
     expect(matchPlayer("Barella", 1, pool2).id).toBeNull();
   });
 
+  it("abbina i cognomi con lettere speciali (ð, ø, ł) scritti con lettere semplici nel file", () => {
+    const pool4 = [{ id: 50, name: "Albert Guðmundsson", role: 4 as const }, { id: 51, name: "Martin Ødegaard", role: 3 as const }, { id: 52, name: "Łukasz Skorupski", role: 1 as const }];
+    expect(matchPlayer("Gudmundsson", 4, pool4).id).toBe(50);
+    expect(matchPlayer("Odegaard", 3, pool4).id).toBe(51);
+    expect(matchPlayer("Skorupski", 1, pool4).id).toBe(52);
+  });
+
   it("il nome breve dello stesso giocatore non crea ambiguità", () => {
     const pool3 = [
       { id: 40, name: "Guglielmo Vicario", role: 1 as const }, { id: 40, name: "G. Vicario", role: 1 as const },

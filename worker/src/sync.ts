@@ -128,12 +128,15 @@ export async function syncLineups(env: Env, m: SaMatch, budget: Budget): Promise
   budget.left--;
   const now = Date.now();
   const confirmed = r.lineup_status === "confirmed" ? 1 : 0;
-  type Row = { unavailable: string | null; doubtful: number; predicted: string | null; subRole: string | null };
+  type Row = { unavailable: string | null; doubtful: number; predicted: string | null; subRole: string | null; reason: string | null; expectedReturn: string | null };
   const rows = new Map<number, Row>();
   const set = (id: number | null, patch: Partial<Row>) => {
     if (!id) return;
-    rows.set(id, { unavailable: null, doubtful: 0, predicted: null, subRole: null, ...rows.get(id), ...patch });
+    rows.set(id, { unavailable: null, doubtful: 0, predicted: null, subRole: null, reason: null, expectedReturn: null, ...rows.get(id), ...patch });
   };
+  // Motivo e rientro previsto: i nomi dei campi variano tra le fonti, si prendono quelli presenti.
+  const text = (...v: unknown[]) => { const x = v.find((y) => typeof y === "string" && y.trim()); return x ? String(x).trim().slice(0, 120) : null; };
+  const detail = (u: any) => ({ reason: text(u.reason, u.injury, u.injury_type, u.description, u.details, u.note), expectedReturn: text(u.expected_return, u.expected_return_date, u.estimated_return, u.return_date, u.expected_return_at) });
   for (const side of ["home", "away"] as const) {
     const l = r.lineups?.[side];
     // Posizione in campo dei titolari dal modulo (es. 3-4-3) e dall'ordine della formazione.
@@ -141,16 +144,17 @@ export async function syncLineups(env: Env, m: SaMatch, budget: Budget): Promise
     for (const p of l?.players ?? []) set(p.id, { predicted: "starter", subRole: subRoles.get(p) ?? null });
     for (const p of l?.substitutes ?? []) set(p.id, { predicted: "bench" });
     for (const u of r.unavailable_players?.[side] ?? []) {
-      if (u.status === "doubtful") set(u.id, { doubtful: 1 });
-      else set(u.id, { unavailable: u.status === "suspended" ? "suspension" : u.status === "injured" ? "injury" : "other" });
+      if (u.status === "doubtful") set(u.id, { doubtful: 1, ...detail(u) });
+      else set(u.id, { unavailable: u.status === "suspended" ? "suspension" : u.status === "injured" ? "injury" : "other", ...detail(u) });
     }
   }
   const stmts = [...rows].map(([id, v]) =>
     env.DB.prepare(
-      `INSERT INTO player_status (player_id, matchday, unavailable, doubtful, predicted, confirmed, sub_role, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      `INSERT INTO player_status (player_id, matchday, unavailable, doubtful, predicted, confirmed, sub_role, reason, expected_return, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT(player_id, matchday) DO UPDATE SET unavailable = excluded.unavailable, doubtful = excluded.doubtful,
-         predicted = excluded.predicted, confirmed = excluded.confirmed, sub_role = excluded.sub_role, updated_at = excluded.updated_at`,
-    ).bind(id, m.matchday, v.unavailable, v.doubtful, v.predicted, confirmed, v.subRole, now));
+         predicted = excluded.predicted, confirmed = excluded.confirmed, sub_role = excluded.sub_role, reason = excluded.reason,
+         expected_return = excluded.expected_return, updated_at = excluded.updated_at`,
+    ).bind(id, m.matchday, v.unavailable, v.doubtful, v.predicted, confirmed, v.subRole, v.reason, v.expectedReturn, now));
   if (stmts.length) await env.DB.batch(stmts);
   return confirmed === 1;
 }
@@ -295,6 +299,16 @@ async function syncSteps(env: Env, budget: Budget): Promise<void> {
         await kvSet(env, `sync:final:${m.id}`, true);
       }
     });
+  }
+
+  // Indisponibili: una verifica al giorno sulle partite della giornata della formazione, anche se lontane.
+  const dayKey = `sync:injuries:${day}`;
+  if (!(await kvRead<boolean>(env, dayKey)) && budget.left > 10) {
+    for (const m of await matchesOf(env, info.lineupMatchday)) {
+      if (!m.ext_event_id || m.kickoff <= now || budget.left <= 10) continue;
+      await perMatch(async () => { const confirmed = await syncLineups(env, m, budget); await kvSet(env, `sync:lineup:${m.id}`, { confirmed }); });
+    }
+    await kvSet(env, dayKey, true);
   }
 
   // Storico per la titolarità recente: giornate passate, poche partite per volta.

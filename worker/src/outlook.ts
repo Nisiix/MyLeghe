@@ -42,6 +42,10 @@ const toEvents = (r: PmRow): MatchEvents => ({
 export interface PlayerOutlookOut {
   starterPercent: number;
   unavailable: string | null;
+  /** Motivo e rientro previsto dell'indisponibilità, quando la fonte li fornisce. */
+  reason: string | null;
+  expectedReturn: string | null;
+  statusUpdatedAt: number | null;
   doubtful: boolean;
   predicted: string | null;
   confirmed: boolean;
@@ -108,6 +112,9 @@ export async function computeOutlook(env: Env, leagueId: string): Promise<{ matc
     };
     players[r.ext_id] = {
       ...outlook,
+      reason: st?.reason ?? null,
+      expectedReturn: st?.expected_return ?? null,
+      statusUpdatedAt: st?.updated_at ?? null,
       starterPercent: starterProbability(outlook),
       opponent: match ? `${home ? "vs" : "@"} ${(home ? match.away_tla : match.home_tla) ?? (home ? match.away_name : match.home_name)}` : null,
       kickoff: match?.kickoff ?? null,

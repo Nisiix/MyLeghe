@@ -45,6 +45,10 @@ export function useRound() {
 export interface Outlook {
   starterPercent: number;
   unavailable: "injury" | "suspension" | "other" | null;
+  /** Motivo e rientro previsto dell'indisponibilità (null se la fonte non li dà). */
+  reason: string | null;
+  expectedReturn: string | null;
+  statusUpdatedAt: number | null;
   doubtful: boolean;
   predicted: "starter" | "bench" | null;
   confirmed: boolean;
