@@ -2,7 +2,7 @@
 <html lang="it">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <title>FootballLite: la tua lega, la tua formazione, il live</title>
     <meta name="description" content="App gratuita per seguire la propria lega di fantacalcio: titolarità stimata, formazione consigliata, live e simulazione del risultato con il regolamento della lega." />
     <meta name="theme-color" content="#083d27" />
@@ -37,7 +37,7 @@
       header.top { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 18px 0; }
       .brand { display: flex; align-items: center; gap: 10px; font-size: 26px; text-decoration: none; }
       .brand img { width: 36px; height: 36px; }
-      nav a { font-weight: 600; text-decoration: none; margin-left: 18px; font-size: 15px; }
+      nav a { display: inline-block; font-weight: 600; text-decoration: none; margin-left: 18px; padding: 10px 2px; font-size: 15px; }
       nav a:hover { text-decoration: underline; }
 
       .card-btn { display: inline-block; background: var(--cartellino); color: var(--inchiostro); font-weight: 800; padding: 14px 22px; border-radius: 12px; text-decoration: none; box-shadow: 4px 4px 0 var(--inchiostro); transform: rotate(-1.5deg); transition: transform 0.15s; }
@@ -48,6 +48,7 @@
       .hero h1 { font-size: clamp(56px, 9vw, 112px); }
       .hero p.lead { font-size: 20px; max-width: 34em; margin: 22px 0 30px; color: #24382f; }
       .ctas { display: flex; flex-wrap: wrap; gap: 16px; align-items: center; }
+      .meta { margin-top: 14px; font-size: 14px; color: var(--muto); }
       .pitch { position: relative; aspect-ratio: 4 / 5; border-radius: 22px; background: repeating-linear-gradient(0deg, #0d5c3a 0 12.5%, #0f6340 12.5% 25%); border: 3px solid rgba(244, 246, 239, 0.4); display: flex; flex-direction: column; justify-content: space-around; padding: 18px 8px; overflow: hidden; }
       .pitch::before { content: ""; position: absolute; left: 8%; right: 8%; top: 50%; border-top: 3px solid rgba(244, 246, 239, 0.35); }
       .pitch::after { content: ""; position: absolute; left: 50%; top: 50%; width: 30%; aspect-ratio: 1; transform: translate(-50%, -50%); border: 3px solid rgba(244, 246, 239, 0.35); border-radius: 50%; }
@@ -82,16 +83,46 @@
       footer { padding: 40px 0 56px; border-top: 2px solid var(--linea); color: var(--muto); font-size: 14px; }
       footer p + p { margin-top: 8px; }
 
+      /* Barra di download fissa, solo su telefono: compare quando il pulsante principale esce dallo schermo */
+      .dock { display: none; }
+
       @media (max-width: 860px) {
-        .hero { grid-template-columns: 1fr; padding-top: 16px; }
-        .pitch { max-width: 420px; }
+        .hero { grid-template-columns: 1fr; gap: 36px; padding: 12px 0 48px; }
+        .hero p.lead { font-size: 18px; margin: 18px 0 26px; }
+        .pitch { width: 100%; max-width: 440px; margin-inline: auto; aspect-ratio: 6 / 5; padding: 12px 6px; }
+        section.block { padding: 48px 0; }
+        section.block .intro { margin-bottom: 24px; }
         .features, .sources { grid-template-columns: 1fr; }
-        ol.steps { grid-template-columns: 1fr; }
+        .feature { padding: 18px 0; }
+        .feature h3 { font-size: 26px; }
+        /* I passi diventano righe numerate: numero a sinistra, testo a destra */
+        ol.steps { grid-template-columns: 1fr; gap: 0; }
+        ol.steps li { display: grid; grid-template-columns: 48px 1fr; column-gap: 8px; background: none; border: 0; border-top: 1px solid var(--linea); border-radius: 0; padding: 18px 0; }
+        ol.steps li::before { grid-row: 1 / span 2; font-size: 44px; margin: 0; }
+        .sources { gap: 0; }
+
+        body.has-dock { padding-bottom: calc(76px + env(safe-area-inset-bottom)); }
+        .dock { display: flex; align-items: center; justify-content: space-between; gap: 12px; position: fixed; left: 0; right: 0; bottom: 0; z-index: 10;
+          padding: 12px 16px calc(12px + env(safe-area-inset-bottom)); background: var(--erba-scura); color: var(--gesso);
+          transform: translateY(110%); transition: transform 0.2s ease-out; }
+        .dock.show { transform: none; }
+        .dock span { font-size: 14px; line-height: 1.3; }
+        .dock a { flex: none; background: var(--cartellino); color: var(--inchiostro); font-weight: 800; padding: 12px 16px; border-radius: 10px; text-decoration: none; }
+      }
+      @media (max-width: 520px) {
+        header.top { padding: 10px 0; }
+        .brand { font-size: 24px; }
+        .hero h1 { font-size: clamp(46px, 14.5vw, 64px); }
+        .ctas .card-btn { display: block; width: 100%; text-align: center; transform: rotate(-1deg); }
+        .av { width: 38px; height: 38px; font-size: 13px; }
+        .pl { font-size: 11px; }
+        section.block h2 { font-size: 40px; }
       }
       @media (prefers-reduced-motion: reduce) {
         html { scroll-behavior: auto; }
-        .card-btn { transition: none; }
+        .card-btn, .dock { transition: none; }
       }
+      .dock[hidden] { display: none; }
     </style>
   </head>
   <body>
@@ -109,8 +140,9 @@
             <h1 id="titolo" class="display">La formazione giusta, prima del fischio.</h1>
             <p class="lead">FootballLite è un'app gratuita per la tua lega di fantacalcio. Vedi la titolarità stimata di ogni giocatore, schiera con la formazione consigliata e segui il live della giornata con il regolamento della tua lega.</p>
             <div class="ctas">
-              <a class="card-btn" href="download/FootballLite.apk" download>Scarica l'APK per Android</a>
+              <a class="card-btn" id="cta-main" href="download/FootballLite.apk" download>Scarica l'APK per Android</a>
             </div>
+            <p class="meta">Android 7.0 o successivo, 1,1 MB. Su iPhone si usa dal browser.</p>
           </div>
           <div class="pitch" role="img" aria-label="Esempio di formazione con la percentuale di titolarità sotto ogni giocatore">
             <div class="prow"><div class="pl"><span class="av">RV</span><span class="pct hi">90%</span></div><div class="pl"><span class="av">MS</span><span class="pct hi">85%</span></div><div class="pl"><span class="av">BR</span><span class="pct hi">80%</span></div></div>
@@ -157,5 +189,23 @@
         <p>Nessuna foto o logo di terzi: squadre e giocatori sono rappresentati da iniziali.</p>
       </footer>
     </div>
+
+    <div class="dock" id="dock" hidden>
+      <span><strong>FootballLite</strong><br />per Android, 1,1 MB</span>
+      <a href="download/FootballLite.apk" download>Scarica l'APK</a>
+    </div>
+    <script>
+      // Barra di download: visibile solo dopo aver superato il pulsante principale (senza JavaScript resta nascosta).
+      (function () {
+        var dock = document.getElementById("dock"), cta = document.getElementById("cta-main");
+        if (!dock || !cta || !("IntersectionObserver" in window)) return;
+        dock.hidden = false;
+        document.body.classList.add("has-dock");
+        new IntersectionObserver(function (entries) {
+          var e = entries[0];
+          dock.classList.toggle("show", !e.isIntersecting && e.boundingClientRect.top < 0);
+        }).observe(cta);
+      })();
+    </script>
   </body>
 </html>
