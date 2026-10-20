@@ -84,6 +84,31 @@ export function Shirt({ name, role, size = 44, empty = false }: { name?: string;
   );
 }
 
+/** Stato di disponibilità come icona (al posto della scritta): infortunato, squalificato, indisponibile, in dubbio. */
+export function AvailabilityIcon({ unavailable, doubtful, size = 16 }: { unavailable?: string | null; doubtful?: boolean | number | null; size?: number }) {
+  if (unavailable === "injury") return (
+    <svg viewBox="0 0 16 16" width={size} height={size} role="img" aria-label="Infortunato" className="shrink-0"><title>Infortunato</title>
+      <rect x="1" y="1" width="14" height="14" rx="4" fill="#e03131" /><path d="M8 4v8M4 8h8" stroke="#ffffff" strokeWidth="2.4" strokeLinecap="round" />
+    </svg>
+  );
+  if (unavailable === "suspension") return (
+    <svg viewBox="0 0 16 16" width={size} height={size} role="img" aria-label="Squalificato" className="shrink-0"><title>Squalificato</title>
+      <rect x="4.5" y="1.5" width="8" height="13" rx="1.5" fill="#e03131" stroke="#8a1010" strokeWidth=".8" transform="rotate(-12 8 8)" />
+    </svg>
+  );
+  if (unavailable) return (
+    <svg viewBox="0 0 16 16" width={size} height={size} role="img" aria-label="Indisponibile" className="shrink-0"><title>Indisponibile</title>
+      <circle cx="8" cy="8" r="6.5" fill="none" stroke="#868e96" strokeWidth="2.2" /><path d="M3.8 12.2l8.4-8.4" stroke="#868e96" strokeWidth="2.2" strokeLinecap="round" />
+    </svg>
+  );
+  if (doubtful) return (
+    <svg viewBox="0 0 16 16" width={size} height={size} role="img" aria-label="In dubbio" className="shrink-0"><title>In dubbio</title>
+      <circle cx="8" cy="8" r="7" fill="#f59f00" /><text x="8" y="11.6" textAnchor="middle" fontSize="10.5" fontWeight={900} fill="#ffffff" fontFamily="Archivo, sans-serif">?</text>
+    </svg>
+  );
+  return null;
+}
+
 /** Titolarità stimata da FootballLite, con colore per fascia. */
 export function StarterPercent({ percent, threshold = 70 }: { percent: number | null | undefined; threshold?: number }) {
   if (percent === null || percent === undefined || Number.isNaN(percent)) return <span className="text-[10px] text-muted" title="Giocatore non abbinato alla fonte dati">n.d.</span>;

@@ -2,12 +2,21 @@ import { moduleShape, orderBench, parseLineupText, ROLE_NAME, ROLES, suggestLine
 import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
-import { Button, Card, Empty, ErrorBox, RoleTag, Sheet, Spinner, StarterPercent, fmt, formatCountdown, useNow } from "../components/ui";
+import { AvailabilityIcon, Button, Card, Empty, ErrorBox, RoleTag, Sheet, Spinner, StarterPercent, fmt, formatCountdown, useNow } from "../components/ui";
 import { Figurine } from "../components/Figurine";
 import { api, ApiError } from "../lib/api";
 import { useLeague, useLineups, useOutlook, useRound, type Lineup, type Outlook, type RosterPlayer } from "../lib/data";
 import { useSession } from "../lib/session";
-import { availabilityText as statusText, newsSearchUrl, prettyTeam, rosterOf, scoredRoster } from "../lib/team";
+import { availabilityText, newsSearchUrl, prettyTeam, rosterOf, scoredRoster } from "../lib/team";
+
+/** Nelle righe lo stato è un'icona accanto alla titolarità: come testo resta solo l'avviso di mancato abbinamento. */
+const statusText = (o?: Outlook) => (o ? "" : availabilityText(o));
+
+/** Titolarità con lo stato come icona: se il giocatore è indisponibile (infortunio, squalifica) solo l'icona; se in dubbio, icona e percentuale. */
+function Pct({ p }: { p: Row }) {
+  if (p.outlook?.unavailable) return <AvailabilityIcon unavailable={p.outlook.unavailable} size={18} />;
+  return <span className="inline-flex shrink-0 items-center gap-1"><AvailabilityIcon doubtful={p.outlook?.doubtful} /><StarterPercent percent={p.starterPercent} /></span>;
+}
 
 type Row = ScoredPlayer & { info: RosterPlayer; outlook?: Outlook };
 
@@ -514,7 +523,7 @@ function Editor({ teamId, proxyName, round, deadline, started, liveLabel, scored
           <span className="block truncate text-xs text-muted">{[prettyTeam(p.info.ext_team), statusText(p.outlook)].filter(Boolean).join(" · ")}</span>
         </span>
       </button>
-      {!p.info.ext_id && canMatch ? <MatchButton name={p.name} onClick={() => openSheet(p.id)} /> : <StarterPercent percent={p.starterPercent} />}
+      {!p.info.ext_id && canMatch ? <MatchButton name={p.name} onClick={() => openSheet(p.id)} /> : <Pct p={p} />}
     </>
   );
   const now = useNow();
@@ -694,7 +703,7 @@ function Editor({ teamId, proxyName, round, deadline, started, liveLabel, scored
                 <div className="min-w-0 flex-1 text-sm">
                   <p className="font-semibold">{[SINGULAR[acting.role][0].toUpperCase() + SINGULAR[acting.role].slice(1), prettyTeam(acting.info.ext_team)].filter(Boolean).join(" · ")}</p>
                   <p className="text-xs text-muted">{[statusText(acting.outlook), `FM stimata ${fmt(acting.expectedFantavote, 2)}`].filter(Boolean).join(" · ")}</p>
-                  <p className="mt-1 flex items-center gap-2 text-xs"><span className="rounded-full bg-surface-2 px-2 py-0.5 font-bold">{at === "field" ? "Titolare" : at === "bench" ? `In panchina (${bench.indexOf(acting.id) + 1})` : "Riserva"}</span><StarterPercent percent={acting.starterPercent} /></p>
+                  <p className="mt-1 flex items-center gap-2 text-xs"><span className="rounded-full bg-surface-2 px-2 py-0.5 font-bold">{at === "field" ? "Titolare" : at === "bench" ? `In panchina (${bench.indexOf(acting.id) + 1})` : "Riserva"}</span><Pct p={acting} /></p>
                 </div>
               </div>
 
@@ -714,7 +723,7 @@ function Editor({ teamId, proxyName, round, deadline, started, liveLabel, scored
                         <button onClick={() => (choose === "field" ? toField(acting, x.id) : toBenchSpot(acting, x.id))} className="flex w-full items-center gap-3 rounded-lg px-2 py-1.5 text-left hover:bg-surface-2">
                           <Figurine name={x.name} role={x.role} team={x.info.ext_team} size={32} />
                           <span className="min-w-0 flex-1"><span className="block truncate text-sm font-bold">{x.name}</span><span className="block truncate text-xs text-muted">{choose === "bench" ? `Panchina ${bench.indexOf(x.id) + 1} · ` : ""}{prettyTeam(x.info.ext_team)}</span></span>
-                          <StarterPercent percent={x.starterPercent} />
+                          <Pct p={x} />
                         </button>
                       </li>
                     ))}
@@ -758,7 +767,7 @@ function Editor({ teamId, proxyName, round, deadline, started, liveLabel, scored
                 {!replacing.info.ext_id && canMatch && <button className="rounded-full border border-warn/60 bg-card/20 px-2 py-0.5 font-semibold" onClick={() => { setPicking(null); openSheet(replacing.id); }}>Abbina alla fonte</button>}
               </p>
             </div>
-            <StarterPercent percent={replacing.starterPercent} />
+            <Pct p={replacing} />
           </div>
         )}
         {pickGroups.every((g) => !g.players.length) && <Empty>{replacing ? "Nessun panchinaro o riserva di questo ruolo." : "Nessun giocatore disponibile per questo slot."}</Empty>}
@@ -777,7 +786,7 @@ function Editor({ teamId, proxyName, round, deadline, started, liveLabel, scored
                       </div>
                       <div className="truncate text-xs text-muted">{[prettyTeam(p.info.ext_team), statusText(p.outlook), `FM ${fmt(p.expectedFantavote, 2)}`].filter(Boolean).join(" · ")}</div>
                     </div>
-                    <StarterPercent percent={p.starterPercent} />
+                    <Pct p={p} />
                   </button>
                 </li>
               ))}
@@ -842,7 +851,7 @@ function PitchPlayer({ p, badge, hot, lifted, handlers }: { p: Row; badge: "C" |
       </span>
       <span className="-mt-0.5 w-full truncate rounded bg-white px-1 text-[11px] font-extrabold leading-[18px] text-[#13203b] shadow">{p.name}</span>
       <span className="mt-0.5 flex items-center text-[10px] font-semibold leading-3 text-white">
-        <StarterPercent percent={p.starterPercent} />
+        <Pct p={p} />
       </span>
     </button>
   );
