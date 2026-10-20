@@ -15,8 +15,8 @@ export function Dashboard() {
   if (!league.data?.teams.length) {
     return (
       <Card title="Lega da configurare">
-        <Empty>{s?.admin ? "Importa le rose e il calendario dalla pagina Admin." : "L'admin non ha ancora importato le rose della lega."}</Empty>
-        {s?.admin && <Link to="/admin"><Button className="w-full">Vai ad Admin</Button></Link>}
+        <Empty>{s?.admin ? "Importa le rose e il calendario dalla gestione della lega (menu della lega in alto a sinistra)." : "L'admin non ha ancora importato le rose della lega."}</Empty>
+        {s?.admin && <Link to="/admin"><Button className="w-full">Vai alla gestione della lega</Button></Link>}
       </Card>
     );
   }
@@ -217,7 +217,7 @@ function RiskCard() {
           {unmatched === roster.length
             ? "Di solito i giocatori di Serie A non sono ancora stati scaricati: l'abbinamento avviene da solo dopo la prima sincronizzazione (una volta al giorno)."
             : "L'admin può abbinarli a mano."}
-          {s.admin && <> Stato in <Link to="/admin" className="underline">Admin → Abbinamenti</Link>.</>}
+          {s.admin && <> Stato in <Link to="/admin" className="underline">Gestione lega → Abbinamenti</Link>.</>}
         </p>
       )}
     </Card>

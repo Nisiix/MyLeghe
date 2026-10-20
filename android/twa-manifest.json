@@ -15,7 +15,7 @@
   "enableNotifications": true,
   "startUrl": "/",
   "iconUrl": "https://footballlite.footballlite-app.workers.dev/icon-512.png",
-  "maskableIconUrl": "https://footballlite.footballlite-app.workers.dev/icon-512.png",
+  "maskableIconUrl": "https://footballlite.footballlite-app.workers.dev/icon-maskable-512.png",
   "appVersionName": "1.0.0",
   "appVersionCode": 1,
   "shortcuts": [],

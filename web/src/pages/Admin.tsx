@@ -11,7 +11,7 @@ export function AdminPage() {
   const league = useLeague();
   if (league.isLoading) return <Spinner />;
   if (league.error) return <ErrorBox error={league.error} />;
-  if (!league.data?.me.admin) return <Card title="Admin"><Empty>Serve il codice admin della lega: aggiungilo dalla pagina di accesso.</Empty></Card>;
+  if (!league.data?.me.admin) return <Card title="Gestione lega"><Empty>Serve il codice admin della lega: aggiungilo dalla pagina di accesso.</Empty></Card>;
   return (
     <div className="flex flex-col gap-4">
       <h1 className="px-1 text-2xl font-extrabold leading-none">Gestione lega</h1>

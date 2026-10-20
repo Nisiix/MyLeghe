@@ -7,7 +7,23 @@ import { setTheme, useTheme } from "../lib/theme";
 import { DataStatusBanner } from "./DataStatus";
 import { Drawer, Sheet, Switch, TeamBadge } from "./ui";
 
-/** Elenco delle leghe del dispositivo, ingresso in un'altra lega e creazione di una nuova. */
+const ICONS: Record<string, ReactNode> = {
+  home: <path d="M3 10.5L12 3l9 7.5V20a1 1 0 01-1 1h-5v-6H9v6H4a1 1 0 01-1-1z" />,
+  lineup: <><rect x="4" y="3" width="16" height="18" rx="2" /><path d="M4 12h16M12 3v3M9 21v-3h6v3" /><circle cx="12" cy="12" r="2.5" /></>,
+  rosters: <><circle cx="9" cy="8" r="3.2" /><path d="M3 20c0-3.3 2.7-6 6-6s6 2.7 6 6" /><circle cx="17" cy="9" r="2.6" /><path d="M16 14.2c2.8-.4 5 1.8 5 4.8" /></>,
+  live: <><circle cx="12" cy="12" r="9" /><path d="M10 8.5l5.5 3.5-5.5 3.5z" /></>,
+  user: <><circle cx="12" cy="8" r="4" /><path d="M4 21c0-4.4 3.6-8 8-8s8 3.6 8 8" /></>,
+  bell: <><path d="M6 16V11a6 6 0 1112 0v5l2 2H4z" /><path d="M10 20a2 2 0 004 0" /></>,
+  shield: <path d="M12 3l8 3v6c0 4.5-3.4 8.2-8 9-4.6-.8-8-4.5-8-9V6z" />,
+  info: <><circle cx="12" cy="12" r="9" /><path d="M12 11v6M12 7.5v.5" /></>,
+  moon: <path d="M20 14.5A8 8 0 019.5 4a8 8 0 1010.5 10.5z" />,
+};
+
+const Icon = ({ name, className = "size-6", strokeWidth = 1.8 }: { name: string; className?: string; strokeWidth?: number }) => (
+  <svg viewBox="0 0 24 24" className={className} fill="none" stroke="currentColor" strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round" aria-hidden>{ICONS[name]}</svg>
+);
+
+/** Menu della lega (in alto a sinistra): gestione della lega per l'admin, leghe del dispositivo, altra lega o nuova lega. */
 function LeagueMenu({ open, onClose }: { open: boolean; onClose: () => void }) {
   const s = useSession();
   const leagues = useLeagues();
@@ -15,7 +31,16 @@ function LeagueMenu({ open, onClose }: { open: boolean; onClose: () => void }) {
   const qc = useQueryClient();
   const go = (search: string) => { onClose(); session.detach(); navigate(`/accesso?${search}`); };
   return (
-    <Sheet open={open} onClose={onClose} title="Le tue leghe">
+    <Sheet open={open} onClose={onClose} title={s?.league.name ?? "Lega"}>
+      {s?.admin && (
+        <button onClick={() => { onClose(); navigate("/admin"); }}
+          className="mb-4 flex w-full items-center gap-3 rounded-xl border border-line bg-surface-2 px-3 py-3 text-left font-bold">
+          <Icon name="shield" className="size-5 text-muted" />
+          <span className="flex-1">Gestione lega<span className="block text-xs font-normal text-muted">Rose, calendario, regolamento, utenti e abbinamenti</span></span>
+          <span className="text-muted" aria-hidden>›</span>
+        </button>
+      )}
+      <h3 className="mb-2 text-xs font-bold uppercase tracking-wide text-muted">Le tue leghe</h3>
       <ul className="mb-4 flex flex-col gap-2">
         {leagues.map((l) => (
           <li key={l.id}>
@@ -35,22 +60,6 @@ function LeagueMenu({ open, onClose }: { open: boolean; onClose: () => void }) {
     </Sheet>
   );
 }
-
-const ICONS: Record<string, ReactNode> = {
-  home: <path d="M3 10.5L12 3l9 7.5V20a1 1 0 01-1 1h-5v-6H9v6H4a1 1 0 01-1-1z" />,
-  lineup: <><rect x="4" y="3" width="16" height="18" rx="2" /><path d="M4 12h16M12 3v3M9 21v-3h6v3" /><circle cx="12" cy="12" r="2.5" /></>,
-  rosters: <><circle cx="9" cy="8" r="3.2" /><path d="M3 20c0-3.3 2.7-6 6-6s6 2.7 6 6" /><circle cx="17" cy="9" r="2.6" /><path d="M16 14.2c2.8-.4 5 1.8 5 4.8" /></>,
-  live: <><circle cx="12" cy="12" r="9" /><path d="M10 8.5l5.5 3.5-5.5 3.5z" /></>,
-  user: <><circle cx="12" cy="8" r="4" /><path d="M4 21c0-4.4 3.6-8 8-8s8 3.6 8 8" /></>,
-  bell: <><path d="M6 16V11a6 6 0 1112 0v5l2 2H4z" /><path d="M10 20a2 2 0 004 0" /></>,
-  shield: <path d="M12 3l8 3v6c0 4.5-3.4 8.2-8 9-4.6-.8-8-4.5-8-9V6z" />,
-  info: <><circle cx="12" cy="12" r="9" /><path d="M12 11v6M12 7.5v.5" /></>,
-  moon: <path d="M20 14.5A8 8 0 019.5 4a8 8 0 1010.5 10.5z" />,
-};
-
-const Icon = ({ name, className = "size-6", strokeWidth = 1.8 }: { name: string; className?: string; strokeWidth?: number }) => (
-  <svg viewBox="0 0 24 24" className={className} fill="none" stroke="currentColor" strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round" aria-hidden>{ICONS[name]}</svg>
-);
 
 /** Barra in basso come nelle app di lega: Home, Formazione, Rose, Live. */
 function TabBar() {
@@ -82,14 +91,13 @@ function TabBar() {
   );
 }
 
-/** Menu dell'app (pulsante con le tre linee): utente, notifiche, admin, informazioni e tema chiaro/scuro. */
+/** Menu dell'app (pulsante con le tre linee): utente, notifiche, informazioni e tema chiaro/scuro. */
 function MainMenu({ open, onClose }: { open: boolean; onClose: () => void }) {
   const s = useSession();
   const theme = useTheme();
   const items = [
     { to: "/utente", label: "Impostazioni utente", icon: "user" },
     { to: "/notifiche", label: "Notifiche", icon: "bell" },
-    ...(s?.admin ? [{ to: "/admin", label: "Admin", icon: "shield" }] : []),
     { to: "/informazioni", label: "Informazioni", icon: "info" },
   ];
   return (
@@ -133,7 +141,7 @@ export function Layout() {
           </button>
         )}
         {myTeam ? <TeamBadge id={myTeam.id} name={myTeam.name} size={36} /> : null}
-        <button onClick={() => setLeagues(true)} className="min-w-0 flex-1 text-left" aria-label="Cambia lega">
+        <button onClick={() => setLeagues(true)} className="min-w-0 flex-1 text-left" aria-label={s?.admin ? "Menu della lega: gestione lega e cambio lega" : "Cambia lega"}>
           <div className="truncate text-base font-extrabold leading-tight">{s?.league.name ?? "FootballLite"} <span className="text-white/60">▾</span></div>
           <div className="truncate text-xs text-white/70">{myTeam ? myTeam.name : s?.admin ? "Admin" : "Solo visualizzazione"}</div>
         </button>

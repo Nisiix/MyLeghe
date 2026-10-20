@@ -47,10 +47,14 @@ export function LineupPage() {
 }
 
 type Snapshot = { module: string; starters: string[]; bench: string[]; captain: string | null; vice: string | null; message: { ok: boolean; text: string } | null };
-type Picking = { role: number; replace: string | null; target: "starters" | "bench" };
+/** Slot vuoto toccato: del campo (con il ruolo) o della panchina. */
+type Picking = { role: number; target: "starters" | "bench" };
 type Candidate = { id: number; name: string; team_name: string; role?: number | null };
 /** Gestori del trascinamento (dito o mouse) e del tocco su un giocatore. */
 type Grab = { onPointerDown: (e: React.PointerEvent) => void; onClick: (e: React.MouseEvent) => void; onContextMenu: (e: React.MouseEvent) => void };
+/** Esempi del formato accettato da «Importa rosa» (formazione incollata come testo). */
+const EXAMPLE_LINEUP = "Atletico Mascalzone (3-4-3)\nSommer\nBastoni\nBremer\nBuongiorno\nDimarco\nBarella (C)\nTonali\nCalhanoglu\nLookman\nLautaro (VC)\nKean\n----------\nMeret\nDarmian\nFrattesi\nThuram";
+const EXAMPLE_ROLES = "Modulo 3-4-3\nTitolari\nP Sommer\nD Bastoni, Bremer, Buongiorno\nC Dimarco, Barella (C), Tonali, Calhanoglu\nA Lookman, Lautaro (VC), Kean\nPanchina\nP Meret\nD Darmian\nC Frattesi\nA Thuram";
 const SINGULAR: Record<number, string> = { 1: "portiere", 2: "difensore", 3: "centrocampista", 4: "attaccante" };
 
 /**
@@ -365,20 +369,19 @@ function Editor({ teamId, proxyName, round, started, scored, cfg, current, last,
     setMessage(null);
   }
 
-  /** Scelta dalla lista: sostituzione di un titolare oppure riempimento di uno slot vuoto (campo o panchina). */
+  /**
+   * Scelta per uno slot vuoto, come in Leghe Fantacalcio. Slot del campo: una riserva entra in campo oppure un
+   * panchinaro dello stesso ruolo diventa titolare. Posto in panchina: una riserva va in panchina oppure un titolare
+   * passa dal campo alla panchina (il suo slot in campo resta libero).
+   */
   function pick(id: string) {
     if (!picking) return;
-    if (picking.replace !== null) {
-      const replaced = picking.replace;
-      setStarters(starters.map((x) => (x === replaced ? id : x)));
-      if (captain === replaced) setCaptain(id);
-      if (vice === replaced) setVice(id);
-      if (bench.includes(id)) setBench(bench.map((x) => (x === id ? replaced : x)));
-    } else if (picking.target === "starters") {
+    if (picking.target === "starters") {
       setStarters([...starters, id]);
       setBench(bench.filter((x) => x !== id));
     } else {
-      setBench([...bench, id].slice(0, cfg.benchCount));
+      if (starters.includes(id)) { setStarters(starters.filter((x) => x !== id)); clearRoles(id); }
+      setBench([...bench.filter((x) => x !== id), id].slice(0, cfg.benchCount));
     }
     setPicking(null);
     setMessage(null);
@@ -422,10 +425,16 @@ function Editor({ teamId, proxyName, round, started, scored, cfg, current, last,
   }
 
   const rows = [4, 3, 2, 1].map((role) => ({ role, players: startersOf(role), empty: Math.max(0, want[role] - startersOf(role).length) }));
-  const candidates = scored
-    .filter((p) => (picking?.role ? p.role === picking.role : true) && !starters.includes(p.id) && (picking?.replace !== null || !bench.includes(p.id)))
-    .filter((p) => !(picking?.target === "bench" && picking.replace === null) || benchRoomFor(p.role))
-    .sort((a, b) => a.role - b.role || b.score - a.score);
+  const byRoleScore = (a: Row, b: Row) => a.role - b.role || b.score - a.score;
+  const pickGroups: { title: string; hint: string; players: Row[] }[] = !picking ? [] : picking.target === "starters"
+    ? [
+      { title: "Riserve", hint: "Entra in campo", players: free.filter((p) => p.role === picking.role).sort(byRoleScore) },
+      { title: "In panchina", hint: "Da panchinaro a titolare", players: benchRows.filter((p) => p.role === picking.role).sort(byRoleScore) },
+    ]
+    : [
+      { title: "Riserve", hint: "Va in panchina", players: free.filter((p) => benchRoomFor(p.role)).sort(byRoleScore) },
+      { title: "Titolari", hint: "Dal campo alla panchina: il suo slot resta libero", players: starterRows.filter((p) => benchRoomFor(p.role)).sort(byRoleScore) },
+    ];
   const acting = action ? byId.get(action) : undefined;
   const badgeOf = (id: string) => (captainOn ? (id === captain ? "C" : id === vice ? "VC" : null) : null);
   const stateOf = (id: string) => (starters.includes(id) ? "Titolare" : bench.includes(id) ? `Panchina ${bench.indexOf(id) + 1}` : null);
@@ -444,7 +453,7 @@ function Editor({ teamId, proxyName, round, started, scored, cfg, current, last,
           </div>
         </div>
         <div className="flex gap-2 p-3">
-          <Button variant="outline" className="flex-1 px-2" onClick={() => { setPasting(true); setPasteError(null); }}>Incolla</Button>
+          <Button variant="outline" className="flex-1 px-2" onClick={() => { setPasting(true); setPasteError(null); }}>Importa rosa</Button>
           <button type="button" aria-pressed={!!suggested} onClick={toggleSuggestion}
             className={`flex flex-1 items-center justify-center gap-1.5 rounded-full border-2 px-2 py-2.5 text-[15px] font-bold transition ${suggested
               ? "border-card bg-card text-card-ink shadow-[0_0_0_3px_color-mix(in_srgb,var(--color-card)_35%,transparent)]"
@@ -467,7 +476,7 @@ function Editor({ teamId, proxyName, round, started, scored, cfg, current, last,
       {unmatched === scored.length && (
         <div className="rounded-xl border border-line bg-surface-2 p-3 text-xs text-muted">
           Nessun giocatore della rosa è ancora abbinato alla fonte dati: la titolarità stimata non è disponibile e la formazione consigliata si basa sui crediti d'asta.
-          {admin ? <> Controlla lo stato in <Link to="/admin" className="underline">Admin → Abbinamenti</Link>.</> : " L'abbinamento avviene da solo dopo la prima sincronizzazione."}
+          {admin ? <> Controlla lo stato in <Link to="/admin" className="underline">Gestione lega → Abbinamenti</Link>.</> : " L'abbinamento avviene da solo dopo la prima sincronizzazione."}
         </div>
       )}
 
@@ -492,7 +501,7 @@ function Editor({ teamId, proxyName, round, started, scored, cfg, current, last,
               <PitchPlayer key={p.id} p={p} badge={badgeOf(p.id)} hot={over === `s:${p.id}`} lifted={drag?.id === p.id} handlers={grab(p.id, () => toReserves(p))} />
             ))}
             {Array.from({ length: r.empty }, (_, i) => (
-              <EmptySlot key={`e${i}`} role={r.role} hot={over === `slot:${r.role}`} onClick={() => setPicking({ role: r.role, replace: null, target: "starters" })} />
+              <EmptySlot key={`e${i}`} role={r.role} hot={over === `slot:${r.role}`} onClick={() => setPicking({ role: r.role, target: "starters" })} />
             ))}
           </div>
         ))}
@@ -533,7 +542,7 @@ function Editor({ teamId, proxyName, round, started, scored, cfg, current, last,
             ))}
             {Array.from({ length: Math.max(0, cfg.benchCount - bench.length) }, (_, i) => (
               <li key={`b${i}`} className="py-1.5">
-                <button className="flex w-full items-center gap-2 rounded-lg border border-dashed border-line px-2 py-1.5 text-left text-sm text-muted hover:border-accent" onClick={() => setPicking({ role: 0, replace: null, target: "bench" })}>
+                <button className="flex w-full items-center gap-2 rounded-lg border border-dashed border-line px-2 py-1.5 text-left text-sm text-muted hover:border-accent" onClick={() => setPicking({ role: 0, target: "bench" })}>
                   <span className="w-5 text-xs tabular">{bench.length + i + 1}</span><span>Aggiungi panchinaro</span>
                 </button>
               </li>
@@ -618,35 +627,64 @@ function Editor({ teamId, proxyName, round, started, scored, cfg, current, last,
         )}
       </Sheet>
 
-      <Sheet open={!!picking} onClose={() => setPicking(null)} title={picking?.replace ? "Sostituisci con" : picking?.target === "bench" ? "Aggiungi in panchina" : `Scegli ${picking ? SINGULAR[picking.role] ?? "" : ""}`}>
-        {candidates.length === 0 && <Empty>Nessun giocatore disponibile per questo slot.</Empty>}
-        <ul className="flex flex-col gap-1">
-          {candidates.map((p) => (
-            <li key={p.id} className="flex items-center gap-2">
-              <button onClick={() => pick(p.id)} className="flex min-w-0 flex-1 items-center gap-3 rounded-xl bg-surface-2 px-3 py-2 text-left">
-                <PlayerAvatar name={p.name} role={p.role} size={36} />
-                <div className="min-w-0 flex-1">
-                  <div className="truncate text-sm font-medium">{p.name}{bench.includes(p.id) && <span className="text-[10px] text-muted"> (panchina)</span>}</div>
-                  <div className="text-xs text-muted">{statusText(p.outlook)} FM stimata {fmt(p.expectedFantavote, 2)}</div>
-                </div>
-                <StarterPercent percent={p.starterPercent} />
-              </button>
-              <a href={newsSearchUrl(p.info.ext_name ?? p.name)} target="_blank" rel="noreferrer" className="shrink-0 px-1 text-xs text-accent underline">News</a>
-            </li>
-          ))}
-        </ul>
+      <Sheet open={!!picking} onClose={() => setPicking(null)} title={picking?.target === "bench" ? `Posto ${bench.length + 1} in panchina` : `Slot ${picking ? SINGULAR[picking.role] ?? "" : ""}`}>
+        {pickGroups.every((g) => !g.players.length) && <Empty>Nessun giocatore disponibile per questo slot.</Empty>}
+        {pickGroups.filter((g) => g.players.length).map((g) => (
+          <section key={g.title} className="mb-3">
+            <h3 className="mb-1.5 flex items-baseline justify-between text-xs font-bold uppercase tracking-wide text-muted">{g.title}<span className="font-semibold normal-case tracking-normal">{g.hint}</span></h3>
+            <ul className="flex flex-col gap-1">
+              {g.players.map((p) => (
+                <li key={p.id} className="flex items-center gap-2">
+                  <button onClick={() => pick(p.id)} className="flex min-w-0 flex-1 items-center gap-3 rounded-xl border border-line bg-surface-2 px-3 py-2 text-left hover:border-accent">
+                    <PlayerAvatar name={p.name} role={p.role} size={36} />
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-1.5 truncate text-sm font-semibold">
+                        {p.name}
+                        {stateOf(p.id) && <span className="rounded bg-line px-1 text-[10px] font-bold text-muted">{stateOf(p.id)}</span>}
+                      </div>
+                      <div className="truncate text-xs text-muted">{[p.info.ext_team, p.outlook?.opponent ? `vs ${p.outlook.opponent}` : null, statusText(p.outlook), `FM ${fmt(p.expectedFantavote, 2)}`].filter(Boolean).join(" · ")}</div>
+                    </div>
+                    <StarterPercent percent={p.starterPercent} />
+                  </button>
+                  <a href={newsSearchUrl(p.info.ext_name ?? p.name)} target="_blank" rel="noreferrer" className="shrink-0 px-1 text-xs text-accent underline">News</a>
+                </li>
+              ))}
+            </ul>
+          </section>
+        ))}
       </Sheet>
 
-      <Sheet open={pasting} onClose={() => setPasting(false)} title="Incolla la formazione">
-        <p className="mb-2 text-sm text-muted">Incolla il testo della formazione (es. quella condivisa da Leghe Fantacalcio o scritta in chat): FootballLite riconosce il modulo, i titolari, la panchina e il capitano dai nomi e dai ruoli indicati.</p>
-        <textarea className="h-48 w-full rounded-xl border border-line bg-surface p-3 font-mono text-sm outline-none focus:border-accent" value={pasteText} onChange={(e) => setPasteText(e.target.value)}
-          placeholder={"Squadra (3-4-3)\nVicario\nMiranda J.\n…\n----------\nMeret\n…"} aria-label="Testo della formazione" />
+      <Sheet open={pasting} onClose={() => setPasting(false)} title="Importa rosa">
+        <p className="mb-3 text-sm">Puoi incollare qui la tua formazione come testo, per esempio quella condivisa da Leghe Fantacalcio o scritta in chat: FootballLite riconosce modulo, titolari, panchina, capitano e vice e li abbina ai giocatori della tua rosa.</p>
+        <details className="mb-3 rounded-xl border border-line bg-surface-2 p-3 text-sm" open={!pasteText}>
+          <summary className="cursor-pointer font-bold">Formato da incollare</summary>
+          <ul className="mt-2 flex list-disc flex-col gap-1 pl-5 text-xs text-muted">
+            <li>Prima riga: nome della squadra con il modulo tra parentesi, es. <b className="text-ink">(3-4-3)</b>.</li>
+            <li>Poi gli 11 titolari, uno per riga, dal portiere agli attaccanti.</li>
+            <li>Una riga di trattini <b className="text-ink">----------</b> separa i titolari dalla panchina.</li>
+            <li>Sotto, i panchinari nell'ordine delle sostituzioni.</li>
+            <li><b className="text-ink">(C)</b> e <b className="text-ink">(VC)</b> dopo il nome indicano capitano e vice.</li>
+            <li>Basta il cognome come nella rosa; se è ambiguo aggiungi l'iniziale (es. «Martinez L.»).</li>
+          </ul>
+          <div className="mt-3 flex flex-col gap-2">
+            <div>
+              <p className="mb-1 text-[11px] font-bold text-muted">Esempio</p>
+              <pre className="overflow-x-auto rounded-lg border border-line bg-surface p-2 font-mono text-[11px] leading-4 text-ink">{EXAMPLE_LINEUP}</pre>
+            </div>
+            <div>
+              <p className="mb-1 text-[11px] font-bold text-muted">Oppure con i ruoli</p>
+              <pre className="overflow-x-auto rounded-lg border border-line bg-surface p-2 font-mono text-[11px] leading-4 text-ink">{EXAMPLE_ROLES}</pre>
+            </div>
+          </div>
+          <p className="mt-2 text-[11px] text-muted">Senza riga di trattini né «Titolari»/«Panchina», i titolari sono i primi giocatori per ruolo secondo il modulo, oppure i primi 11.</p>
+        </details>
+        <textarea className="h-44 w-full rounded-xl border border-line bg-surface p-3 font-mono text-sm outline-none focus:border-accent" value={pasteText} onChange={(e) => setPasteText(e.target.value)}
+          placeholder="Incolla qui la formazione…" aria-label="Testo della formazione" />
         {pasteError && <p className="mt-2 text-sm text-danger">{pasteError}</p>}
         <div className="mt-3 flex gap-2">
-          {typeof navigator !== "undefined" && !!navigator.clipboard?.readText && <Button variant="ghost" className="flex-1" onClick={pasteFromClipboard}>Dagli appunti</Button>}
-          <Button variant="card" className="flex-1" disabled={!pasteText.trim()} onClick={applyPasted}>Applica</Button>
+          {typeof navigator !== "undefined" && !!navigator.clipboard?.readText && <Button variant="ghost" className="flex-1" onClick={pasteFromClipboard}>Incolla dagli appunti</Button>}
+          <Button variant="card" className="flex-1" disabled={!pasteText.trim()} onClick={applyPasted}>Importa</Button>
         </div>
-        <p className="mt-3 text-[11px] text-muted">Senza «Titolari» e «Panchina» (o una riga di trattini), i titolari sono i primi giocatori per ruolo secondo il modulo, oppure i primi 11. Capitano e vice con (C) e (VC). Se un nome è ambiguo, aggiungi l'iniziale.</p>
       </Sheet>
 
       <Sheet open={confirmForce} onClose={() => setConfirmForce(false)} title="Modificare a giornata iniziata?">
