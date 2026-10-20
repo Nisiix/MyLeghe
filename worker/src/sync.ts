@@ -7,7 +7,9 @@ import { BSD_SERIE_A, bsdGet, bsdList, quotaUsed, BSD_DAILY_BUDGET, CallCapError
 import { sourcesAccepted } from "./terms";
 
 const MIN = 60_000, HOUR = 3600_000;
-/** Richieste BSD massime per singola esecuzione del cron (ogni 10 minuti). */
+/** Intervallo di aggiornamento di statistiche e risultati durante le partite (il cron gira ogni 5 minuti). */
+const LIVE_EVERY = 5 * MIN - 30_000;
+/** Richieste BSD massime per singola esecuzione del cron (ogni 5 minuti). */
 const RUN_CAP = 40;
 /** Richieste esterne massime per esecuzione (BSD + football-data.org): il piano Free di Cloudflare ne consente 50. */
 const MAX_EXTERNAL_CALLS = 45;
@@ -240,8 +242,11 @@ export async function runSync(baseEnv: Env): Promise<{ used: number; calls: numb
 async function syncSteps(env: Env, budget: Budget): Promise<void> {
   const now = Date.now();
 
-  if (await due(env, "sync:fdMatches", 30 * MIN)) {
-    const info = await activeRound(env);
+  // Orari, risultati e stato delle partite: ogni 5 minuti mentre si gioca (per chiudere presto le partite finite), altrimenti ogni 30.
+  const round = await activeRound(env);
+  const playing = round.matches.some((m) => m.kickoff <= now && now - m.kickoff < 2.5 * HOUR && !["FINISHED", "AWARDED"].includes(m.status));
+  if (await due(env, "sync:fdMatches", playing ? LIVE_EVERY : 30 * MIN)) {
+    const info = round;
     await refreshMatchday(env, info.matchday);
     await kvSet(env, "sync:fdMatches", now);
   }
@@ -271,9 +276,9 @@ async function syncSteps(env: Env, budget: Budget): Promise<void> {
           await kvSet(env, key, { confirmed });
         }
       } else if (toKick <= 0 && now - m.kickoff < 2.5 * HOUR) {
-        // In corso: statistiche e cronaca ogni 10 minuti (prima la formazione ufficiale, se manca).
+        // In corso: statistiche e cronaca ogni 5 minuti (prima la formazione ufficiale, se manca).
         if (!state?.value.confirmed) await kvSet(env, key, { confirmed: await syncLineups(env, m, budget) });
-        if (await due(env, `sync:live:${m.id}`, 10 * MIN)) { await syncMatchStats(env, m, budget); await kvSet(env, `sync:live:${m.id}`, now); }
+        if (await due(env, `sync:live:${m.id}`, LIVE_EVERY)) { await syncMatchStats(env, m, budget); await kvSet(env, `sync:live:${m.id}`, now); }
       } else if (toKick <= 0 && !(await kvRead<boolean>(env, `sync:final:${m.id}`))) {
         // Finita: ultimo aggiornamento definitivo.
         if (!state?.value.confirmed) await syncLineups(env, m, budget);

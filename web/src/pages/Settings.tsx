@@ -80,7 +80,7 @@ function NotifyCard({ teamId }: { teamId: number }) {
         <label className={row}>Bonus e malus dei giocatori schierati dal tuo avversario (dal calendario) <input type="checkbox" className={box} checked={prefs.opponentEventAlerts} onChange={toggle("opponentEventAlerts")} /></label>
         <Button onClick={() => save({ ...prefs, enabled: true })}>Salva preferenze</Button>
         {msg && <p className={`text-xs ${msg.ok ? "text-accent" : "text-danger"}`}>{msg.text}</p>}
-        <p className="text-[11px] text-muted">Gli eventi arrivano con qualche minuto di ritardo (aggiornamento ogni 10 minuti).</p>
+        <p className="text-[11px] text-muted">Gli eventi arrivano con qualche minuto di ritardo (durante le partite si aggiorna ogni 5 minuti).</p>
       </div>
     </Card>
   );

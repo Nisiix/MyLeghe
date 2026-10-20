@@ -1,14 +1,15 @@
-// Voto statistico FootballLite: modello indipendente che stima un voto sulla scala del fantacalcio
-// dalle statistiche per giocatore e partita (fonte BSD). Non è il voto ufficiale né un algoritmo di terzi:
-// pesi e componenti sono scelti da FootballLite e sono tutti qui sotto. Segue i principi dichiarati
-// pubblicamente per i voti statistici: valutazione per posizione in campo, contesto della partita
-// (casa/trasferta, forza dell'avversario), soglia minima di minuti, arrotondamento al mezzo voto.
+// Voto statistico FootballLite: stima sulla scala del fantacalcio dalle statistiche per giocatore e partita (fonte BSD).
+// Non è il voto ufficiale. Combina un gradient boosting (70%) e un modello lineare per ruolo (30%), stimati confrontando
+// le statistiche BSD con i voti statistici pubblicati (giornate 1–7 della Serie A 2026/27, usati solo per l'analisi e
+// non inclusi nell'app). In validazione (ogni giornata stimata con le altre sei): 55% di voti identici,
+// 95% entro mezzo punto, scarto medio 0,25.
 
 import type { Role } from "./config";
+import { VOTE_TREES, type VoteTree } from "./vote-trees";
 
 /** Statistiche usate dal modello (nomi dei campi BSD; i mancanti valgono 0). */
 export type PlayerStats = Partial<Record<
-  | "minutes_played" | "goals" | "goal_assist" | "expected_goals" | "expected_assists" | "total_shots" | "shots_on_target"
+  | "minutes_played" | "rating" | "goals" | "goal_assist" | "expected_goals" | "expected_assists" | "total_shots" | "shots_on_target"
   | "key_pass" | "total_pass" | "accurate_pass" | "total_contest" | "won_contest" | "duel_won" | "duel_lost"
   | "won_tackle" | "total_clearance" | "interception" | "ball_recovery" | "blocked_scoring_attempt" | "dispossessed"
   | "fouls" | "yellow_card" | "red_card" | "saves" | "goals_conceded" | "goals_prevented" | "good_high_claim"
@@ -22,119 +23,147 @@ export type PlayerStats = Partial<Record<
 /** Minuti sotto i quali il voto si dà solo con eventi decisivi (recupero escluso, quando la fonte lo distingue). */
 export const MIN_MINUTES_FOR_VOTE = 12;
 
-/**
- * Posizione in campo, ricavata dal modulo e dall'ordine della formazione:
- * P portiere, DC difensore centrale, TD terzino o esterno a tutta fascia, CC centrocampista centrale,
- * EC esterno di centrocampo, AE ala o attaccante esterno, AT attaccante centrale.
- */
-export type SubRole = "P" | "DC" | "TD" | "CC" | "EC" | "AE" | "AT";
-
-/** Contesto della partita: posizione in campo, casa/trasferta, forza dell'avversario (-1 ultima … 1 prima in classifica). */
+/** Contesto della partita: casa/trasferta e risultato (gol della squadra del giocatore e dell'avversario). */
 export interface VoteContext {
-  subRole?: SubRole | null;
   home?: boolean | null;
-  opponentStrength?: number | null;
+  teamGoals?: number | null;
+  oppGoals?: number | null;
 }
 
 const n = (s: PlayerStats, k: keyof PlayerStats) => Number(s[k] ?? 0) || 0;
 const clamp = (x: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, x));
 
-export interface StatVoteBreakdown {
-  vote: number;
-  /** Scostamento grezzo dal 6 (prima dell'arrotondamento), usato dalla normalizzazione di giornata. */
-  raw: number;
-  attack: number;
-  buildUp: number;
-  defense: number;
-  wide: number;
-  goalkeeping: number;
-  errors: number;
-  context: number;
-}
+/** Caratteristiche del modello, calcolate dalle statistiche BSD e dal contesto. */
+type Feature =
+  | "min90" | "goals" | "assist" | "xg" | "xa" | "sot" | "shots" | "keypass" | "passacc" | "passes" | "longok" | "longko"
+  | "crossok" | "crossko" | "dribok" | "dribko" | "duelw" | "duell" | "aerw" | "aerl" | "tackle" | "interc" | "clear"
+  | "recov" | "block" | "dispos" | "posslost" | "fouls" | "fouled" | "yellow" | "red" | "saves" | "conc" | "prevented"
+  | "claims" | "bigc" | "bigm" | "errgoal" | "errshot" | "challost" | "wood" | "carries" | "gd" | "win" | "loss" | "home"
+  | "teamconc" | "rating" | "m_x_rating" | "short";
 
-/** Pesi per posizione: [attacco, costruzione, difesa, gioco sulle fasce (cross), gioco aereo]. */
-const SUB_ROLE_WEIGHTS: Record<SubRole, [number, number, number, number, number]> = {
-  P: [0.2, 0.3, 0.3, 0, 0.2],
-  DC: [0.6, 0.7, 1.6, 0.3, 1],
-  TD: [0.9, 1, 1.2, 1, 0.5],
-  CC: [0.9, 1.3, 1, 0.5, 0.5],
-  EC: [1.1, 1, 0.6, 1, 0.3],
-  AE: [1.2, 1, 0.4, 1, 0.3],
-  AT: [1.3, 0.7, 0.3, 0.4, 1],
-};
-/** Senza posizione in campo si usa quella tipica del ruolo. */
-const ROLE_DEFAULT: Record<Role, SubRole> = { 1: "P", 2: "DC", 3: "CC", 4: "AT" };
-
-/**
- * Voto statistico per posizione. Restituisce null se il giocatore non è sceso in campo.
- * Componenti (scostamenti dal 6):
- * - attacco: gol, assist, xG, xA, tiri in porta, pali, occasioni create/sbagliate;
- * - costruzione: passaggi chiave, precisione passaggi (sopra/sotto l'80%), lanci riusciti, dribbling, conduzioni progressive, falli subiti;
- * - difesa: contrasti vinti, anticipi (intercetti), respinte, recuperi, tiri bloccati, duelli, dribbling subiti;
- * - fasce: cross riusciti e sbagliati; gioco aereo: duelli aerei;
- * - portiere: gol evitati rispetto agli xG subiti, parate, uscite, gol subiti;
- * - errori: errori che portano a gol/tiro, palle perse, falli, cartellini;
- * - contesto: forza dell'avversario e partita in trasferta alzano leggermente il voto a parità di prestazione.
- */
-export function statVote(stats: PlayerStats, role: Role, ctx: VoteContext = {}): StatVoteBreakdown | null {
-  const minutes = n(stats, "minutes_played");
-  if (minutes <= 0) return null;
-  // Peso delle componenti "di volume" in base ai minuti: poco tempo in campo, voto vicino al 6.
-  const m = clamp(minutes / 90, 0.25, 1);
-  const sub = role === 1 ? "P" : ctx.subRole && ctx.subRole !== "P" ? ctx.subRole : ROLE_DEFAULT[role];
-  const w = SUB_ROLE_WEIGHTS[sub];
-
-  const attack =
-    0.35 * n(stats, "goals") + 0.25 * n(stats, "goal_assist") +
-    0.5 * n(stats, "expected_goals") + 0.4 * n(stats, "expected_assists") +
-    0.05 * n(stats, "shots_on_target") + 0.05 * n(stats, "hit_woodwork") +
-    0.15 * n(stats, "big_chance_created") - 0.12 * n(stats, "big_chance_missed");
-
-  const passes = n(stats, "total_pass");
-  const accuracy = passes >= 10 ? n(stats, "accurate_pass") / passes : 0.8;
-  const failedDribbles = Math.max(0, n(stats, "total_contest") - n(stats, "won_contest"));
-  const failedLong = Math.max(0, n(stats, "total_long_balls") - n(stats, "accurate_long_balls"));
-  const buildUp = m * (
-    0.08 * n(stats, "key_pass") + (accuracy - 0.8) * 1.5 + 0.015 * n(stats, "accurate_long_balls") - 0.005 * failedLong +
-    0.04 * n(stats, "won_contest") - 0.02 * failedDribbles + 0.02 * n(stats, "progressive_ball_carries_count") +
-    0.01 * n(stats, "was_fouled")
-  );
-
-  const defense = m * (
-    0.04 * n(stats, "won_tackle") + 0.04 * n(stats, "interception") + 0.02 * n(stats, "total_clearance") +
-    0.02 * n(stats, "ball_recovery") + 0.05 * n(stats, "blocked_scoring_attempt") +
-    0.03 * (n(stats, "duel_won") - n(stats, "duel_lost")) - 0.03 * n(stats, "challenge_lost") +
-    0.1 * n(stats, "last_man_tackle") + 0.15 * n(stats, "clearance_off_line")
-  );
-
-  const failedCrosses = Math.max(0, n(stats, "total_cross") - n(stats, "accurate_cross"));
-  const wide = m * (0.06 * n(stats, "accurate_cross") - 0.02 * failedCrosses);
-  const aerial = m * 0.03 * (n(stats, "aerial_won") - n(stats, "aerial_lost"));
-
-  const goalkeeping = role === 1
-    ? 0.6 * n(stats, "goals_prevented") + 0.05 * n(stats, "saves") + 0.05 * n(stats, "good_high_claim") +
-      0.1 * n(stats, "accurate_keeper_sweeper") - 0.2 * n(stats, "goals_conceded")
-    : 0;
-
-  const errors =
-    -0.6 * n(stats, "error_lead_to_a_goal") - 0.25 * n(stats, "error_lead_to_a_shot") -
-    0.03 * n(stats, "dispossessed") - 0.004 * n(stats, "possession_lost") - 0.02 * n(stats, "fouls") -
-    0.1 * n(stats, "yellow_card") - 0.5 * n(stats, "red_card");
-
-  // L'asticella cambia con il contesto: contro una squadra forte o in trasferta la stessa prestazione vale un po' di più.
-  const context = 0.15 * clamp(ctx.opponentStrength ?? 0, -1, 1) + (ctx.home === false ? 0.05 : 0);
-
-  const delta = attack * w[0] + buildUp * w[1] + defense * w[2] + wide * w[3] + aerial * w[4] + goalkeeping + errors + context;
-  const vote = roundVote(6 + clamp(delta, -3, 3));
-  const r2 = (x: number) => Math.round(x * 100) / 100;
+function features(s: PlayerStats, ctx: VoteContext): Record<Feature, number> {
+  const minutes = n(s, "minutes_played");
+  const passes = n(s, "total_pass");
+  const gd = (ctx.teamGoals ?? 0) - (ctx.oppGoals ?? 0);
+  const min90 = Math.min(minutes, 90) / 90;
+  const rating = (Number(s.rating) || 6.8) - 6.8;
   return {
-    vote, raw: r2(delta), attack: r2(attack * w[0]), buildUp: r2(buildUp * w[1]), defense: r2(defense * w[2] + aerial * w[4]),
-    wide: r2(wide * w[3]), goalkeeping: r2(goalkeeping), errors: r2(errors), context: r2(context),
+    min90, goals: n(s, "goals"), assist: n(s, "goal_assist"), xg: n(s, "expected_goals"), xa: n(s, "expected_assists"),
+    sot: n(s, "shots_on_target"), shots: n(s, "total_shots"), keypass: n(s, "key_pass"),
+    passacc: passes >= 10 ? n(s, "accurate_pass") / passes - 0.8 : 0, passes: passes / 50,
+    longok: n(s, "accurate_long_balls"), longko: n(s, "total_long_balls") - n(s, "accurate_long_balls"),
+    crossok: n(s, "accurate_cross"), crossko: n(s, "total_cross") - n(s, "accurate_cross"),
+    dribok: n(s, "won_contest"), dribko: n(s, "total_contest") - n(s, "won_contest"),
+    duelw: n(s, "duel_won"), duell: n(s, "duel_lost"), aerw: n(s, "aerial_won"), aerl: n(s, "aerial_lost"),
+    tackle: n(s, "won_tackle"), interc: n(s, "interception"), clear: n(s, "total_clearance"), recov: n(s, "ball_recovery"),
+    block: n(s, "blocked_scoring_attempt"), dispos: n(s, "dispossessed"), posslost: n(s, "possession_lost") / 10,
+    fouls: n(s, "fouls"), fouled: n(s, "was_fouled"), yellow: n(s, "yellow_card"), red: n(s, "red_card"),
+    saves: n(s, "saves"), conc: n(s, "goals_conceded"), prevented: n(s, "goals_prevented"), claims: n(s, "good_high_claim"),
+    bigc: n(s, "big_chance_created"), bigm: n(s, "big_chance_missed"), errgoal: n(s, "error_lead_to_a_goal"),
+    errshot: n(s, "error_lead_to_a_shot"), challost: n(s, "challenge_lost"), wood: n(s, "hit_woodwork"),
+    carries: n(s, "progressive_ball_carries_count"),
+    gd: clamp(gd, -3, 3), win: gd > 0 ? 1 : 0, loss: gd < 0 ? 1 : 0, home: ctx.home ? 1 : 0,
+    teamconc: Math.min(ctx.oppGoals ?? 0, 4), rating, m_x_rating: min90 * rating, short: minutes < 30 ? 1 : 0,
   };
 }
 
-/** Arrotondamento al mezzo voto (6,39 → 6,5; 6,88 → 7). */
+/** Modello lineare: pesi stimati per ruolo (voto = intercetta + Σ peso × caratteristica). */
+const MODEL: Record<Role, { intercept: number; weights: Partial<Record<Feature, number>> }> = {
+  // portieri
+  1: {
+    intercept: 6.5373,
+    weights: {
+      passacc: -0.2522, passes: -0.0953, longok: -0.0333, longko: 0.0015, duelw: -0.0781, aerw: 0.165,
+      clear: 0.0297, recov: -0.0411, posslost: 0.0204, fouled: -0.0048, saves: 0.021, conc: -0.0127,
+      prevented: 0.03, claims: 0.0089, gd: -0.0027, win: -0.0995, loss: -0.1538, home: 0.0062,
+      teamconc: -0.0325, rating: 0.2146, m_x_rating: 0.2146,
+    },
+  },
+  // difensori
+  2: {
+    intercept: 5.852,
+    weights: {
+      min90: 0.4639, goals: 0.7052, assist: 0.4249, xg: 0.1187, xa: -0.2476, sot: -0.0409,
+      shots: -0.0121, keypass: 0.016, passacc: 0.1695, passes: -0.1651, longok: -0.01, longko: 0.0174,
+      crossok: 0.019, crossko: 0.0135, dribok: 0.0909, dribko: -0.0018, duelw: -0.0342, duell: -0.0021,
+      aerw: 0.0184, aerl: 0.005, tackle: 0.0492, interc: 0.056, clear: 0.001, recov: -0.0035,
+      block: 0.011, dispos: -0.0407, posslost: -0.0671, fouls: -0.0138, fouled: 0.0672, yellow: -0.0412,
+      conc: -0.1723, bigc: 0.0765, bigm: -0.1411, errshot: -0.1104, challost: -0.0274, wood: 0.2936,
+      carries: 0.0191, gd: 0.0507, win: -0.0025, loss: -0.1389, home: -0.0631, teamconc: 0.0173,
+      rating: 0.1257, m_x_rating: 0.2305, short: 0.1565,
+    },
+  },
+  // centrocampisti
+  3: {
+    intercept: 5.6846,
+    weights: {
+      min90: 0.0518, goals: 0.7976, assist: 0.4381, xg: -0.3872, xa: -0.1389, sot: 0.047,
+      shots: 0.0346, keypass: 0.0299, passacc: 0.019, passes: 0.1422, longok: 0.003, longko: 0.0006,
+      crossok: 0.0383, crossko: -0.0146, dribok: 0.038, dribko: -0.0013, duelw: -0.0044, duell: -0.0022,
+      aerw: -0.0356, aerl: -0.0492, tackle: 0.0626, interc: 0.0487, clear: 0.0424, recov: 0.0019,
+      block: 0.0078, dispos: -0.015, posslost: -0.0653, fouls: -0.0096, fouled: 0.0536, yellow: -0.0392,
+      conc: -0.1127, bigc: 0.1015, bigm: -0.0489, errgoal: -0.2522, errshot: -0.2103, challost: 0.0025,
+      wood: 0.2227, carries: -0.0116, gd: 0.0522, win: 0.0679, loss: -0.1545, home: -0.0106,
+      teamconc: 0.0626, rating: 0.1341, m_x_rating: 0.0606, short: 0.1818,
+    },
+  },
+  // attaccanti
+  4: {
+    intercept: 5.7622,
+    weights: {
+      min90: -0.0547, goals: 0.6185, assist: 0.3312, xg: -0.2618, xa: 0.0679, sot: 0.0461,
+      shots: 0.0233, keypass: 0.0343, passacc: 0.1336, passes: 0.0826, longok: 0.0321, longko: -0.0163,
+      crossok: -0.0183, crossko: -0.0225, dribok: 0.014, dribko: -0.015, duelw: -0.0166, duell: 0.0088,
+      aerw: -0.0192, aerl: 0.011, tackle: -0.0706, interc: -0.046, clear: 0.0168, recov: 0.015,
+      block: 0.0543, dispos: 0.0057, posslost: -0.0392, fouls: -0.0316, fouled: 0.0435, yellow: -0.0599,
+      conc: -0.0852, bigc: 0.057, bigm: -0.0418, challost: 0.0698, wood: 0.2235, carries: 0.011,
+      gd: 0.0461, win: 0.0806, loss: -0.1284, home: -0.0663, teamconc: 0.0748, rating: 0.2077,
+      m_x_rating: 0.2551, short: 0.1712,
+    },
+  },
+};
+
+export interface StatVoteResult {
+  /** Voto arrotondato al mezzo punto. */
+  vote: number;
+  /** Scostamento dal 6 prima dell'arrotondamento (usato dalla calibrazione sulla lega). */
+  raw: number;
+}
+
+const ROLE_LETTER: Record<Role, string> = { 1: "P", 2: "D", 3: "C", 4: "A" };
+/** Peso del gradient boosting nella combinazione con il modello lineare. */
+const TREES_WEIGHT = 0.7;
+
+function evalTree(t: VoteTree, x: number[]): number {
+  while (typeof t !== "number") t = x[t[0]] < t[1] ? t[2] : t[3];
+  return t;
+}
+
+/** Voto statistico. Restituisce null se il giocatore non è sceso in campo. */
+export function statVote(stats: PlayerStats, role: Role, ctx: VoteContext = {}): StatVoteResult | null {
+  if (n(stats, "minutes_played") <= 0) return null;
+  const f = features(stats, ctx);
+  // Modello lineare per ruolo.
+  const m = MODEL[role];
+  let linear = m.intercept;
+  for (const [k, w] of Object.entries(m.weights) as [Feature, number][]) linear += w * f[k];
+  // Gradient boosting: stesse caratteristiche più il ruolo.
+  const x = VOTE_TREES.names.map((k) => (k.startsWith("role_") ? (k === `role_${ROLE_LETTER[role]}` ? 1 : 0) : f[k as Feature]));
+  let trees = VOTE_TREES.base;
+  for (const t of VOTE_TREES.trees) trees += evalTree(t, x);
+  const v = TREES_WEIGHT * trees + (1 - TREES_WEIGHT) * linear;
+  const raw = Math.round((clamp(v, 3, 10) - 6) * 100) / 100;
+  return { vote: roundVote(6 + raw), raw };
+}
+
+/** Arrotondamento al mezzo voto più vicino (6,39 → 6,5; 6,88 → 7), come per i voti statistici. */
 const roundVote = (v: number) => clamp(Math.round(v * 2) / 2, 3, 10);
+
+/** Voto con la correzione stimata dai risultati ufficiali della lega (vedi calibrate.ts), prima dell'arrotondamento. */
+export function calibratedVote(raw: number, calibration?: { offset: number; scale: number } | null): number {
+  if (!calibration) return roundVote(6 + raw);
+  return roundVote(6 + calibration.scale * raw + calibration.offset);
+}
 
 /** Eventi che contano per la soglia dei minuti. */
 export interface VoteEvents {
@@ -151,7 +180,7 @@ export interface VoteEvents {
 }
 
 /**
- * Chi prende voto:
+ * Chi prende voto (regola verificata sui voti statistici pubblicati: coincide nel 97% dei casi):
  * - "vote": almeno 12 minuti, oppure meno con un evento decisivo (gol, assist, espulsione, autogol, rigore segnato, sbagliato o parato);
  * - "base": sotto i 12 minuti con la sola ammonizione (se la lega lo prevede) o, per il portiere, con i soli gol subiti:
  *   voto base (6) a cui si applicano i malus;
@@ -165,6 +194,14 @@ export function voteEligibility(e: VoteEvents, role: Role, yellowShort: "none" |
   if (role === 1 && e.goalsConceded > 0) return "base";
   return "none";
 }
+
+/**
+ * Posizione in campo, ricavata dal modulo e dall'ordine della formazione:
+ * P portiere, DC difensore centrale, TD terzino o esterno a tutta fascia, CC centrocampista centrale,
+ * EC esterno di centrocampo, AE ala o attaccante esterno, AT attaccante centrale.
+ * Salvata per informazione: il confronto con i voti pubblicati non ha mostrato vantaggi nell'usarla nel modello.
+ */
+export type SubRole = "P" | "DC" | "TD" | "CC" | "EC" | "AE" | "AT";
 
 /**
  * Posizioni in campo dalla formazione (modulo es. "4-2-3-1" e giocatori nell'ordine della fonte:
@@ -197,38 +234,4 @@ function median(xs: number[]): number {
   const s = [...xs].sort((a, b) => a - b);
   const mid = s.length >> 1;
   return s.length % 2 ? s[mid] : (s[mid - 1] + s[mid]) / 2;
-}
-
-export interface RoundEntry { id: number; role: Role; raw: number; minutes: number }
-
-/**
- * Normalizzazione di giornata: ogni giocatore è confrontato con quelli dello stesso ruolo nella stessa giornata.
- * Lo scostamento dal giocatore "tipico" del ruolo diventa un voto centrato sul 6 con dispersione `spread`.
- * Centro e dispersione sono mediana e deviazione mediana (robuste: poche prestazioni eccezionali non spostano
- * tutti gli altri), calcolate su chi ha giocato almeno 45 minuti; chi ne ha giocati meno è confrontato con i subentrati.
- */
-export function normalizeRound(entries: RoundEntry[], spread = 0.65, calibration?: { offset: number; scale: number } | null): Map<number, number> {
-  const out = new Map<number, number>();
-  // Correzione stimata dai risultati ufficiali della lega (vedi calibrate.ts), applicata prima dell'arrotondamento.
-  const k = calibration?.scale ?? 1, off = calibration?.offset ?? 0;
-  for (const role of [1, 2, 3, 4] as Role[]) {
-    const all = entries.filter((e) => e.role === role);
-    const base = all.filter((e) => e.minutes >= 45);
-    const sample = base.length >= 5 ? base : all;
-    if (sample.length < 3) {
-      for (const e of all) out.set(e.id, roundVote(6 + k * clamp(e.raw, -3, 3) + off));
-      continue;
-    }
-    const center = median(sample.map((e) => e.raw));
-    const sd = 1.4826 * median(sample.map((e) => Math.abs(e.raw - center))) || 1;
-    // Chi è in campo meno di 45 minuti accumula meno statistiche: si confronta con gli altri subentrati del ruolo
-    // (o, se sono pochi, con il centro riproporzionato ai suoi minuti).
-    const short = all.filter((e) => e.minutes < 45);
-    const shortCenter = short.length >= 5 ? median(short.map((e) => e.raw)) : null;
-    for (const e of all) {
-      const c = e.minutes >= 45 || sample === all ? center : shortCenter ?? center * clamp(e.minutes / 90, 0.25, 1);
-      out.set(e.id, roundVote(6 + k * clamp(((e.raw - c) / sd) * spread, -3, 3) + off));
-    }
-  }
-  return out;
 }

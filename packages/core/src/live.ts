@@ -68,7 +68,7 @@ export function estimateVote(e: MatchEvents, role: Role, cfg: LeagueConfig): num
   if (cfg.voteModel === "base") return cfg.baseVote;
   if (cfg.voteModel === "stats" && typeof e.statVote === "number") return e.statVote;
   if (cfg.voteModel === "stats" && e.stats) {
-    const v = statVote({ ...e.stats, minutes_played: e.minutes }, role, e.context ?? {});
+    const v = statVote({ ...e.stats, minutes_played: e.minutes, rating: e.rating ?? null }, role, e.context ?? {});
     if (v) return v.vote;
   }
   return e.rating ? ratingToVote(e.rating) : null;
@@ -80,8 +80,12 @@ export function estimateVote(e: MatchEvents, role: Role, cfg: LeagueConfig): num
  */
 export function playerLiveScore(id: string, role: Role, events: MatchEvents | undefined, state: MatchState, cfg: LeagueConfig): PlayerLiveScore {
   const base = { id, role, yellow: events?.yellow ?? 0, red: events?.red ?? 0, goals: (events?.goals ?? 0) + (events?.penaltyScored ?? 0), assists: events?.assists ?? 0 };
-  // Sotto i 12 minuti senza eventi decisivi: senza voto (s.v.) o voto base con i malus, a partita finita.
+  // Sotto i 12 minuti senza eventi decisivi: a partita finita senza voto (s.v.) o voto base con i malus; a partita in
+  // corso il voto non è ancora maturato e il giocatore resta in attesa (non conta nel parziale, vale 6 in "Simula").
   const eligibility = events ? voteEligibility(events, role, cfg.yellowShortVote) : "none";
+  if (events && events.minutes > 0 && eligibility === "none" && state === "live") {
+    return { ...base, state: "pending", vote: cfg.baseVote, bonus: 0, fantavote: cfg.baseVote };
+  }
   if (events && events.minutes > 0 && !(eligibility === "none" && state === "finished")) {
     const f = fantavote(events, role, cfg, state === "finished", eligibility === "base" ? cfg.baseVote : undefined);
     return { ...base, state: "played", vote: f.vote, bonus: f.bonus, fantavote: f.fantavote };

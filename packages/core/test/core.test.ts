@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   DEFAULT_CONFIG, dueReminder, goalsFromPoints, matchPlayer, normalizeConfig, parseCsv, parseRosterGrid,
-  parseCalendarGrid, playerLiveScore, computeTeam, statVote, normalizeRound, subRolesFromLineup, voteEligibility, fitCalibration, computeMatch, matchGoals, noLineupScore, scorePlayers, starterDrops, starterProbability, suggestLineup, validateLineup,
+  parseCalendarGrid, playerLiveScore, computeTeam, statVote, subRolesFromLineup, voteEligibility, fitCalibration, computeMatch, matchGoals, noLineupScore, scorePlayers, starterDrops, starterProbability, suggestLineup, validateLineup,
   type Cell, type RosterEntry,
 } from "../src";
 
@@ -230,10 +230,10 @@ describe("import calendario", () => {
 
 describe("voto statistico FootballLite", () => {
   it("premia una buona partita e penalizza gli errori, per ruolo", () => {
-    const good = statVote({ minutes_played: 90, goals: 1, expected_goals: 0.8, shots_on_target: 3, key_pass: 2, total_pass: 30, accurate_pass: 26 }, 4)!;
-    const bad = statVote({ minutes_played: 90, error_lead_to_a_goal: 1, dispossessed: 5, total_pass: 30, accurate_pass: 18 }, 3)!;
-    const keeper = statVote({ minutes_played: 90, saves: 6, goals_prevented: 1.2, goals_conceded: 1 }, 1)!;
-    expect(good.vote).toBeGreaterThan(6.5);
+    const good = statVote({ minutes_played: 90, rating: 8, goals: 1, expected_goals: 0.8, shots_on_target: 3, key_pass: 2, total_pass: 30, accurate_pass: 26 }, 4, { teamGoals: 2, oppGoals: 0 })!;
+    const bad = statVote({ minutes_played: 90, rating: 6, error_lead_to_a_goal: 1, dispossessed: 5, total_pass: 30, accurate_pass: 18 }, 3, { teamGoals: 0, oppGoals: 2 })!;
+    const keeper = statVote({ minutes_played: 90, rating: 7.6, saves: 6, goals_prevented: 1.2, goals_conceded: 1 }, 1)!;
+    expect(good.vote).toBeGreaterThanOrEqual(7);
     expect(bad.vote).toBeLessThan(6);
     expect(keeper.vote).toBeGreaterThanOrEqual(6.5);
     expect(statVote({ minutes_played: 0 }, 2)).toBeNull();
@@ -254,6 +254,13 @@ describe("voto statistico FootballLite", () => {
     expect(voteEligibility(ev, 1, "none")).toBe("none");
   });
 
+  it("a partita in corso sotto i 12 minuti il voto non è ancora maturato", () => {
+    // Come in Leghe Fantacalcio: senza voto provvisorio, non conta nel parziale e non fa scattare sostituzioni.
+    expect(playerLiveScore("x", 3, ev, "live", cfg).state).toBe("pending");
+    expect(playerLiveScore("x", 3, { ...ev, goals: 1 }, "live", cfg).state).toBe("played");
+    expect(playerLiveScore("x", 3, { ...ev, minutes: 20, stats: { minutes_played: 20 } }, "live", cfg).state).toBe("played");
+  });
+
   it("applica la soglia nel calcolo live a partita finita", () => {
     expect(playerLiveScore("x", 3, ev, "finished", cfg).state).toBe("absent");
     expect(playerLiveScore("x", 3, { ...ev, goals: 1 }, "finished", cfg).state).toBe("played");
@@ -272,24 +279,11 @@ describe("voto statistico FootballLite", () => {
     expect(subRolesFromLineup("4-4-2", ids(10)).size).toBe(0);
   });
 
-  it("valuta per posizione e tiene conto del contesto", () => {
-    const crosser = { minutes_played: 90, total_cross: 8, accurate_cross: 5, total_pass: 40, accurate_pass: 32 };
-    expect(statVote(crosser, 2, { subRole: "TD" })!.raw).toBeGreaterThan(statVote(crosser, 2, { subRole: "DC" })!.raw);
-    const same = { minutes_played: 90, total_pass: 40, accurate_pass: 34, won_tackle: 3 };
-    const vsTop = statVote(same, 3, { home: false, opponentStrength: 1 })!;
-    const vsLast = statVote(same, 3, { home: true, opponentStrength: -1 })!;
-    expect(vsTop.raw).toBeGreaterThan(vsLast.raw);
-    expect(vsTop.context).toBe(0.2);
-  });
-});
-
-describe("normalizzazione di giornata", () => {
-  it("porta la media di ruolo a 6 e distingue i migliori", () => {
-    const entries = Array.from({ length: 10 }, (_, i) => ({ id: i, role: 3 as const, raw: i * 0.2, minutes: 90 }));
-    const v = normalizeRound(entries);
-    const avg = [...v.values()].reduce((a, b) => a + b, 0) / v.size;
-    expect(Math.abs(avg - 6)).toBeLessThan(0.3);
-    expect(v.get(9)!).toBeGreaterThan(v.get(0)!);
+  it("tiene conto del risultato della squadra", () => {
+    const same = { minutes_played: 90, rating: 6.8, total_pass: 40, accurate_pass: 34, won_tackle: 3 };
+    const won = statVote(same, 2, { home: true, teamGoals: 2, oppGoals: 0 })!;
+    const lost = statVote(same, 2, { home: true, teamGoals: 0, oppGoals: 3 })!;
+    expect(won.raw).toBeGreaterThan(lost.raw);
   });
 });
 

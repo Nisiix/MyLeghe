@@ -23,13 +23,13 @@ App (PWA, anche come APK Android) per seguire la propria lega di fantacalcio. Ro
 | Giocatori, indisponibili, formazioni probabili e ufficiali, statistiche per giocatore e cronaca | [BSD – Bzzoiro Sports Data](https://sports.bzzoiro.com), piano Free, secondo la sua licenza dati |
 | Titolarità, formazione consigliata, voti live | **Stime calcolate da FootballLite**: non sono voti ufficiali |
 
-**Voto statistico FootballLite** (`packages/core/src/vote.ts`): modello indipendente, costruito sui principi dichiarati pubblicamente per i voti statistici (non è Alvin482, i cui pesi e dati Opta non sono pubblici).
-- **Posizione in campo:** ogni giocatore è valutato per dove ha giocato (terzino, centrale, esterno, centrocampista, ala, punta), ricavato da modulo e formazione BSD. Chi entra dalla panchina prende la posizione di chi esce.
-- **Statistiche:** attacco, costruzione, difesa, cross, gioco aereo, portiere ed errori.
-- **Contesto:** forza dell'avversario in classifica e partita in trasferta.
-- **Confronto di giornata:** ogni giocatore è confrontato con quelli dello stesso ruolo nella stessa giornata (centro 6; i subentrati con i subentrati). Il voto è arrotondato al mezzo punto.
-- **Chi prende voto:** chi gioca almeno 12 minuti. Sotto i 12 il voto c'è solo con gol, assist, espulsione, autogol o rigore segnato, sbagliato o parato. Con la sola ammonizione decide un'opzione del regolamento; il portiere con i soli gol subiti prende il voto base con il malus.
-
+**Voto statistico FootballLite** (`packages/core/src/vote.ts`): stima sulla scala del fantacalcio dalle statistiche BSD, non è il voto ufficiale.
+- **Modello:** gradient boosting (70%) più un modello lineare per ruolo (30%), stimati confrontando le statistiche BSD con i voti statistici pubblicati delle giornate 1–7 della Serie A 2026/27. I voti sono stati usati solo in locale per l'analisi: nel repository ci sono solo i pesi.
+- **Precisione in validazione** (ogni giornata stimata con un modello addestrato sulle altre sei): 55% di voti identici, 95% entro mezzo punto, scarto medio 0,25. Prima della ricalibrazione erano 39%, 81% e 0,44.
+- **Cosa entra:** tutte le statistiche per giocatore (attacco, passaggi, cross, dribbling, duelli, difesa, portiere, errori, cartellini), il rating BSD, i minuti giocati e il risultato della partita.
+- **Arrotondamento:** al mezzo punto più vicino, come per i voti statistici (che sono solo interi o mezzi punti).
+- **Chi prende voto:** chi gioca almeno 12 minuti. Sotto i 12 il voto c'è solo con gol, assist, espulsione, autogol o rigore segnato, sbagliato o parato. Con la sola ammonizione decide un'opzione del regolamento; il portiere con i soli gol subiti prende il voto base con il malus. Sui voti pubblicati questa regola coincide nel 97% dei casi.
+- **Live:** statistiche e risultati si aggiornano ogni 5 minuti durante le partite. Chi è in campo da meno di 12 minuti senza eventi decisivi resta senza voto provvisorio, come in Leghe Fantacalcio: non conta nel parziale e non fa scattare sostituzioni, che partono solo a partita finita.
 - **Calibrazione sulla lega:** a ogni import del calendario, nelle giornate con punteggi ufficiali e formazioni inserite in FootballLite, l'app confronta i totali ufficiali delle squadre con quelli calcolati e corregge media e dispersione dei voti stimati (servono almeno 6 punteggi; con pochi dati la correzione resta prudente). Lo scarto prima e dopo è visibile nella pagina Admin.
 
 Non si usano voti pubblicati da terzi (i termini di Fantacalcio ne vietano l'estrazione): la calibrazione si basa solo sui punteggi della propria lega.
