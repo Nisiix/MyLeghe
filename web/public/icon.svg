@@ -43,7 +43,6 @@
 <ellipse cx="288" cy="320" rx="20" ry="9" fill="#ff6b7a"/>
 <ellipse cx="204" cy="272" rx="16" ry="9" fill="#ff8a8a" fill-opacity=".7"/><ellipse cx="372" cy="272" rx="16" ry="9" fill="#ff8a8a" fill-opacity=".7"/>
 </g>
-<path d="M186 160 q18 -44 60 -62" fill="none" stroke="#ffffff" stroke-width="12" stroke-linecap="round" stroke-opacity=".9"/>
 </g>
 </g>
 </svg>
