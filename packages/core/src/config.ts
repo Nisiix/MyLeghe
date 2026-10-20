@@ -92,6 +92,8 @@ export interface LeagueConfig {
    * "rating" = rating della fonte riportato sulla scala del fantacalcio, "base" = voto base a tutti.
    */
   voteModel: "stats" | "rating" | "base";
+  /** Chi gioca meno di 12 minuti con la sola ammonizione: "none" = senza voto, "base" = voto base con il malus. */
+  yellowShortVote: "none" | "base";
   substitutions: {
     max: number;
     /** "role": panchinaro dello stesso ruolo; "free": anche altro ruolo se il modulo risultante è ammesso. */
@@ -128,6 +130,7 @@ export const DEFAULT_CONFIG: LeagueConfig = {
   },
   baseVote: 6,
   voteModel: "stats",
+  yellowShortVote: "none",
   substitutions: { max: 5, mode: "role", officeVoteGoalkeeper: null, officeVoteField: null },
   modifiers: {
     defense: {
@@ -193,6 +196,7 @@ export function normalizeConfig(raw: unknown): LeagueConfig {
     baseVote: num(r.baseVote, d.baseVote),
     // Compatibilità: la prima versione aveva solo voteFromRating.
     voteModel: r.voteModel === "rating" || r.voteModel === "base" || r.voteModel === "stats" ? r.voteModel : r.voteFromRating === false ? "base" : d.voteModel,
+    yellowShortVote: r.yellowShortVote === "base" ? "base" : "none",
     substitutions: {
       // Compatibilità con la prima versione del regolamento (maxSubstitutions).
       max: Math.max(0, Math.round(num(sub.max ?? r.maxSubstitutions, d.substitutions.max))),

@@ -1,6 +1,6 @@
 // Dati aggregati per l'app: giornata attiva, titolarità stimata e dati live dei giocatori delle rose.
 
-import { fantavote, normalizeRound, starterProbability, statVote, type LeagueConfig, type MatchEvents, type PlayerStats, type Role, type RoundEntry } from "@footballlite/core";
+import { fantavote, normalizeRound, starterProbability, statVote, type LeagueConfig, type MatchEvents, type PlayerStats, type Role, type RoundEntry, type SubRole, type VoteContext } from "@footballlite/core";
 import { Hono } from "hono";
 import { requireSession, type AppEnv } from "./auth";
 import type { Env } from "./env";
@@ -137,11 +137,28 @@ outlook.get("/league/live/:round", async (c) => {
   }
   // Voto statistico normalizzato sulla giornata: confronto con tutti i giocatori dello stesso ruolo (non solo delle rose).
   const everyone = await c.env.DB.prepare(
-    "SELECT pm.player_id, pm.minutes, pm.stats, COALESCE(p.role, 3) AS role FROM player_match pm LEFT JOIN players p ON p.id = pm.player_id WHERE pm.matchday = ? AND pm.minutes > 0",
-  ).bind(round).all<{ player_id: number; minutes: number; stats: string | null; role: Role }>();
+    `SELECT pm.player_id, pm.event_id, pm.minutes, pm.stats, COALESCE(p.role, 3) AS role, p.team_ext_id, ps.sub_role
+     FROM player_match pm LEFT JOIN players p ON p.id = pm.player_id
+     LEFT JOIN player_status ps ON ps.player_id = pm.player_id AND ps.matchday = pm.matchday
+     WHERE pm.matchday = ? AND pm.minutes > 0`,
+  ).bind(round).all<{ player_id: number; event_id: number; minutes: number; stats: string | null; role: Role; team_ext_id: number | null; sub_role: SubRole | null }>();
+  // Contesto: casa/trasferta e forza dell'avversario dalla classifica (1 = prima, -1 = ultima).
+  const table = await standings(c.env);
+  const rank = new Map(table.map((t) => [t.team_id, t.position]));
+  const strength = (fdTeam: number) => {
+    const pos = rank.get(fdTeam);
+    return pos && table.length > 1 ? 1 - (2 * (pos - 1)) / (table.length - 1) : 0;
+  };
+  const contextOf = (e: { event_id: number; team_ext_id: number | null; sub_role: SubRole | null }): VoteContext => {
+    const m = ms.find((x) => x.ext_event_id === e.event_id);
+    const fd = e.team_ext_id ? teamMap[e.team_ext_id] : undefined;
+    if (!m || !fd || (fd !== m.home_id && fd !== m.away_id)) return { subRole: e.sub_role };
+    const home = fd === m.home_id;
+    return { subRole: e.sub_role, home, opponentStrength: strength(home ? m.away_id : m.home_id) };
+  };
   const entries: RoundEntry[] = [];
   for (const e of everyone.results ?? []) {
-    const v = statVote({ ...(e.stats ? (JSON.parse(e.stats) as PlayerStats) : {}), minutes_played: e.minutes }, e.role);
+    const v = statVote({ ...(e.stats ? (JSON.parse(e.stats) as PlayerStats) : {}), minutes_played: e.minutes }, e.role, contextOf(e));
     if (v) entries.push({ id: e.player_id, role: e.role, raw: v.raw, minutes: e.minutes });
   }
   const normalized = normalizeRound(entries);

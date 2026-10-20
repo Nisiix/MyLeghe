@@ -1,6 +1,6 @@
 // Sincronizzazione dei dati con licenza (BSD e football-data.org), distribuita nella giornata dal cron.
 
-import { normalizeName } from "@footballlite/core";
+import { normalizeName, subRolesFromLineup } from "@footballlite/core";
 import type { Env } from "./env";
 import { activeRound, kvRead, kvSet, matchesOf, refreshMatchday, refreshStandings, type SaMatch } from "./schedule";
 import { BSD_SERIE_A, bsdGet, bsdList, quotaUsed, BSD_DAILY_BUDGET, CallCapError, SourceError } from "./sources";
@@ -120,14 +120,17 @@ export async function syncLineups(env: Env, m: SaMatch, budget: Budget): Promise
   budget.left--;
   const now = Date.now();
   const confirmed = r.lineup_status === "confirmed" ? 1 : 0;
-  const rows = new Map<number, { unavailable: string | null; doubtful: number; predicted: string | null }>();
-  const set = (id: number | null, patch: Partial<{ unavailable: string | null; doubtful: number; predicted: string | null }>) => {
+  type Row = { unavailable: string | null; doubtful: number; predicted: string | null; subRole: string | null };
+  const rows = new Map<number, Row>();
+  const set = (id: number | null, patch: Partial<Row>) => {
     if (!id) return;
-    rows.set(id, { unavailable: null, doubtful: 0, predicted: null, ...rows.get(id), ...patch });
+    rows.set(id, { unavailable: null, doubtful: 0, predicted: null, subRole: null, ...rows.get(id), ...patch });
   };
   for (const side of ["home", "away"] as const) {
     const l = r.lineups?.[side];
-    for (const p of l?.players ?? []) set(p.id, { predicted: "starter" });
+    // Posizione in campo dei titolari dal modulo (es. 3-4-3) e dall'ordine della formazione.
+    const subRoles = subRolesFromLineup(l?.formation, (l?.players ?? []) as { id: number }[]);
+    for (const p of l?.players ?? []) set(p.id, { predicted: "starter", subRole: subRoles.get(p) ?? null });
     for (const p of l?.substitutes ?? []) set(p.id, { predicted: "bench" });
     for (const u of r.unavailable_players?.[side] ?? []) {
       if (u.status === "doubtful") set(u.id, { doubtful: 1 });
@@ -136,10 +139,10 @@ export async function syncLineups(env: Env, m: SaMatch, budget: Budget): Promise
   }
   const stmts = [...rows].map(([id, v]) =>
     env.DB.prepare(
-      `INSERT INTO player_status (player_id, matchday, unavailable, doubtful, predicted, confirmed, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)
+      `INSERT INTO player_status (player_id, matchday, unavailable, doubtful, predicted, confirmed, sub_role, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT(player_id, matchday) DO UPDATE SET unavailable = excluded.unavailable, doubtful = excluded.doubtful,
-         predicted = excluded.predicted, confirmed = excluded.confirmed, updated_at = excluded.updated_at`,
-    ).bind(id, m.matchday, v.unavailable, v.doubtful, v.predicted, confirmed, now));
+         predicted = excluded.predicted, confirmed = excluded.confirmed, sub_role = excluded.sub_role, updated_at = excluded.updated_at`,
+    ).bind(id, m.matchday, v.unavailable, v.doubtful, v.predicted, confirmed, v.subRole, now));
   if (stmts.length) await env.DB.batch(stmts);
   return confirmed === 1;
 }
@@ -160,6 +163,24 @@ export async function syncMatchStats(env: Env, m: SaMatch, budget: Budget): Prom
     return c;
   };
   const penGoals = count("penalty_goal"), ownGoals = count("own_goal"), penMissed = count("penalty_missed");
+
+  // Chi entra dalla panchina prende la posizione in campo di chi esce (in ordine di minuto, anche a catena).
+  const subs = lines.filter((l) => l.type === "substitution" && l.player?.id && l.related_player?.id)
+    .sort((a, b) => (a.minute ?? 0) - (b.minute ?? 0));
+  if (subs.length) {
+    const known = await env.DB.prepare("SELECT player_id, sub_role FROM player_status WHERE matchday = ? AND sub_role IS NOT NULL")
+      .bind(m.matchday).all<{ player_id: number; sub_role: string }>();
+    const pos = new Map((known.results ?? []).map((r) => [r.player_id, r.sub_role]));
+    const inherited: [number, string][] = [];
+    for (const s of subs) {
+      const from = pos.get(s.player.id);
+      if (from && !pos.has(s.related_player.id)) { pos.set(s.related_player.id, from); inherited.push([s.related_player.id, from]); }
+    }
+    if (inherited.length) await env.DB.batch(inherited.map(([id, role]) => env.DB.prepare(
+      `INSERT INTO player_status (player_id, matchday, sub_role, updated_at) VALUES (?, ?, ?, ?)
+       ON CONFLICT(player_id, matchday) DO UPDATE SET sub_role = COALESCE(player_status.sub_role, excluded.sub_role)`,
+    ).bind(id, m.matchday, role, Date.now())));
+  }
 
   // Rigori parati: solo se in cronaca c'è un rigore sbagliato, si chiede chi l'ha parato agli incidenti.
   const penSaved = new Map<number, number>();
@@ -287,6 +308,8 @@ const STAT_KEYS = [
   "ball_recovery", "blocked_scoring_attempt", "dispossessed", "fouls", "yellow_card", "red_card", "saves", "goals_conceded",
   "goals_prevented", "good_high_claim", "accurate_keeper_sweeper", "big_chance_created", "big_chance_missed", "last_man_tackle",
   "clearance_off_line", "error_lead_to_a_goal", "error_lead_to_a_shot", "progressive_ball_carries_count",
+  "total_cross", "accurate_cross", "aerial_won", "aerial_lost", "total_long_balls", "accurate_long_balls",
+  "possession_lost", "challenge_lost", "hit_woodwork", "was_fouled",
 ];
 function pickStats(p: Record<string, unknown>): Record<string, number> {
   const out: Record<string, number> = {};

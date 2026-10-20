@@ -2,7 +2,7 @@
 // I voti sono stime FootballLite calcolate su statistiche con licenza: non sono i voti ufficiali.
 
 import { bandValue, matchGoals, type LeagueConfig, type Role } from "./config";
-import { MIN_MINUTES_FOR_VOTE, statVote, type PlayerStats } from "./vote";
+import { statVote, voteEligibility, type PlayerStats, type VoteContext } from "./vote";
 
 export interface MatchEvents {
   minutes: number;
@@ -22,6 +22,8 @@ export interface MatchEvents {
   stats?: PlayerStats | null;
   /** Voto statistico già normalizzato sulla giornata (calcolato dal backend su tutti i giocatori). */
   statVote?: number | null;
+  /** Posizione in campo e contesto della partita, per il voto statistico calcolato sul dispositivo. */
+  context?: VoteContext | null;
 }
 
 export type MatchState = "pending" | "live" | "finished";
@@ -49,7 +51,7 @@ export function ratingToVote(rating: number): number {
   return Math.min(10, Math.max(3, Math.round(v * 2) / 2));
 }
 
-export function fantavote(e: MatchEvents, role: Role, cfg: LeagueConfig, finished: boolean): { vote: number; bonus: number; fantavote: number } {
+export function fantavote(e: MatchEvents, role: Role, cfg: LeagueConfig, finished: boolean, voteOverride?: number): { vote: number; bonus: number; fantavote: number } {
   const i = role - 1;
   const b = cfg.bonus;
   let bonus =
@@ -57,7 +59,7 @@ export function fantavote(e: MatchEvents, role: Role, cfg: LeagueConfig, finishe
     e.penaltyScored * b.penaltyScored[i] + e.penaltyMissed * b.penaltyMissed[i] +
     e.penaltySaved * b.penaltySaved[i] + e.ownGoals * b.ownGoal[i] + e.goalsConceded * b.goalConceded[i];
   if (finished && e.goalsConceded === 0 && e.minutes > 0) bonus += b.cleanSheet[i];
-  const vote = estimateVote(e, role, cfg) ?? cfg.baseVote;
+  const vote = voteOverride ?? estimateVote(e, role, cfg) ?? cfg.baseVote;
   return { vote, bonus: round2(bonus), fantavote: round2(vote + bonus) };
 }
 
@@ -66,15 +68,10 @@ export function estimateVote(e: MatchEvents, role: Role, cfg: LeagueConfig): num
   if (cfg.voteModel === "base") return cfg.baseVote;
   if (cfg.voteModel === "stats" && typeof e.statVote === "number") return e.statVote;
   if (cfg.voteModel === "stats" && e.stats) {
-    const v = statVote({ ...e.stats, minutes_played: e.minutes }, role);
+    const v = statVote({ ...e.stats, minutes_played: e.minutes }, role, e.context ?? {});
     if (v) return v.vote;
   }
   return e.rating ? ratingToVote(e.rating) : null;
-}
-
-/** Ha avuto eventi da bonus/malus (in quel caso prende voto anche con pochi minuti). */
-function hasEvents(e: MatchEvents): boolean {
-  return e.goals + e.assists + e.yellow + e.red + e.penaltyScored + e.penaltyMissed + e.penaltySaved + e.ownGoals > 0;
 }
 
 /**
@@ -83,10 +80,10 @@ function hasEvents(e: MatchEvents): boolean {
  */
 export function playerLiveScore(id: string, role: Role, events: MatchEvents | undefined, state: MatchState, cfg: LeagueConfig): PlayerLiveScore {
   const base = { id, role, yellow: events?.yellow ?? 0, red: events?.red ?? 0, goals: (events?.goals ?? 0) + (events?.penaltyScored ?? 0), assists: events?.assists ?? 0 };
-  // Pochi minuti senza eventi: senza voto (s.v.), come nel fantacalcio, quando la sua partita è finita.
-  const tooShort = events && events.minutes > 0 && events.minutes < MIN_MINUTES_FOR_VOTE && !hasEvents(events) && role !== 1;
-  if (events && events.minutes > 0 && !(tooShort && state === "finished")) {
-    const f = fantavote(events, role, cfg, state === "finished");
+  // Sotto i 12 minuti senza eventi decisivi: senza voto (s.v.) o voto base con i malus, a partita finita.
+  const eligibility = events ? voteEligibility(events, role, cfg.yellowShortVote) : "none";
+  if (events && events.minutes > 0 && !(eligibility === "none" && state === "finished")) {
+    const f = fantavote(events, role, cfg, state === "finished", eligibility === "base" ? cfg.baseVote : undefined);
     return { ...base, state: "played", vote: f.vote, bonus: f.bonus, fantavote: f.fantavote };
   }
   if (state === "finished") return { ...base, state: "absent", vote: null, bonus: 0, fantavote: null };

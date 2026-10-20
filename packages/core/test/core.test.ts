@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   DEFAULT_CONFIG, dueReminder, goalsFromPoints, matchPlayer, normalizeConfig, parseCsv, parseRosterGrid,
-  parseCalendarGrid, playerLiveScore, computeTeam, statVote, normalizeRound, computeMatch, matchGoals, noLineupScore, scorePlayers, starterDrops, starterProbability, suggestLineup, validateLineup,
+  parseCalendarGrid, playerLiveScore, computeTeam, statVote, normalizeRound, subRolesFromLineup, voteEligibility, computeMatch, matchGoals, noLineupScore, scorePlayers, starterDrops, starterProbability, suggestLineup, validateLineup,
   type Cell, type RosterEntry,
 } from "../src";
 
@@ -239,10 +239,47 @@ describe("voto statistico FootballLite", () => {
     expect(statVote({ minutes_played: 0 }, 2)).toBeNull();
   });
 
-  it("lascia senza voto chi gioca pochi minuti senza eventi", () => {
-    const ev = { minutes: 10, goals: 0, assists: 0, yellow: 0, red: 0, penaltyScored: 0, penaltyMissed: 0, penaltySaved: 0, ownGoals: 0, goalsConceded: 0, stats: {} };
+  const ev = { minutes: 10, goals: 0, assists: 0, yellow: 0, red: 0, penaltyScored: 0, penaltyMissed: 0, penaltySaved: 0, ownGoals: 0, goalsConceded: 0, stats: {} };
+
+  it("sotto i 12 minuti dà voto solo con eventi decisivi", () => {
+    expect(voteEligibility({ ...ev, minutes: 12 }, 3, "none")).toBe("vote");
+    expect(voteEligibility(ev, 3, "none")).toBe("none");
+    for (const k of ["goals", "assists", "red", "ownGoals", "penaltyScored", "penaltyMissed", "penaltySaved"] as const) {
+      expect(voteEligibility({ ...ev, [k]: 1 }, 3, "none")).toBe("vote");
+    }
+    // Solo ammonizione: decide la lega. Portiere con soli gol subiti: voto base con il malus.
+    expect(voteEligibility({ ...ev, yellow: 1 }, 3, "none")).toBe("none");
+    expect(voteEligibility({ ...ev, yellow: 1 }, 3, "base")).toBe("base");
+    expect(voteEligibility({ ...ev, goalsConceded: 1 }, 1, "none")).toBe("base");
+    expect(voteEligibility(ev, 1, "none")).toBe("none");
+  });
+
+  it("applica la soglia nel calcolo live a partita finita", () => {
     expect(playerLiveScore("x", 3, ev, "finished", cfg).state).toBe("absent");
     expect(playerLiveScore("x", 3, { ...ev, goals: 1 }, "finished", cfg).state).toBe("played");
+    const gk = playerLiveScore("p", 1, { ...ev, goalsConceded: 1 }, "finished", cfg);
+    expect(gk.vote).toBe(6);
+    expect(gk.fantavote).toBe(5);
+    const booked = playerLiveScore("x", 3, { ...ev, yellow: 1 }, "finished", { ...cfg, yellowShortVote: "base" });
+    expect(booked.fantavote).toBe(5.5);
+  });
+
+  it("ricava la posizione in campo da modulo e formazione", () => {
+    const ids = (k: number) => Array.from({ length: k }, (_, i) => i);
+    expect([...subRolesFromLineup("3-4-3", ids(11)).values()]).toEqual(["P", "DC", "DC", "DC", "EC", "CC", "CC", "EC", "AE", "AT", "AE"]);
+    expect([...subRolesFromLineup("4-3-3", ids(11)).values()]).toEqual(["P", "TD", "DC", "DC", "TD", "CC", "CC", "CC", "AE", "AT", "AE"]);
+    expect([...subRolesFromLineup("4-2-3-1", ids(11)).values()]).toEqual(["P", "TD", "DC", "DC", "TD", "CC", "CC", "AE", "CC", "AE", "AT"]);
+    expect(subRolesFromLineup("4-4-2", ids(10)).size).toBe(0);
+  });
+
+  it("valuta per posizione e tiene conto del contesto", () => {
+    const crosser = { minutes_played: 90, total_cross: 8, accurate_cross: 5, total_pass: 40, accurate_pass: 32 };
+    expect(statVote(crosser, 2, { subRole: "TD" })!.raw).toBeGreaterThan(statVote(crosser, 2, { subRole: "DC" })!.raw);
+    const same = { minutes_played: 90, total_pass: 40, accurate_pass: 34, won_tackle: 3 };
+    const vsTop = statVote(same, 3, { home: false, opponentStrength: 1 })!;
+    const vsLast = statVote(same, 3, { home: true, opponentStrength: -1 })!;
+    expect(vsTop.raw).toBeGreaterThan(vsLast.raw);
+    expect(vsTop.context).toBe(0.2);
   });
 });
 

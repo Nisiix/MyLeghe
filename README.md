@@ -23,7 +23,14 @@ App (PWA, anche come APK Android) per seguire la propria lega di fantacalcio. Ro
 | Giocatori, indisponibili, formazioni probabili e ufficiali, statistiche per giocatore e cronaca | [BSD – Bzzoiro Sports Data](https://sports.bzzoiro.com), piano Free, secondo la sua licenza dati |
 | Titolarità, formazione consigliata, voti live | **Stime calcolate da FootballLite**: non sono voti ufficiali |
 
-**Voto statistico FootballLite** (`packages/core/src/vote.ts`): modello indipendente, nello spirito dei voti statistici ma non è Alvin482 (i cui pesi non sono pubblici). Pesa attacco, costruzione, difesa, portiere ed errori sulle statistiche BSD di ogni giocatore e lo confronta con i giocatori dello stesso ruolo nella stessa giornata (media 6). Sotto i 20 minuti senza eventi il giocatore è senza voto. In alternativa l'admin può usare il rating della fonte o il voto base.
+**Voto statistico FootballLite** (`packages/core/src/vote.ts`): modello indipendente, costruito sui principi dichiarati pubblicamente per i voti statistici (non è Alvin482, i cui pesi e dati Opta non sono pubblici).
+- **Posizione in campo:** ogni giocatore è valutato per dove ha giocato (terzino, centrale, esterno, centrocampista, ala, punta), ricavato da modulo e formazione BSD. Chi entra dalla panchina prende la posizione di chi esce.
+- **Statistiche:** attacco, costruzione, difesa, cross, gioco aereo, portiere ed errori.
+- **Contesto:** forza dell'avversario in classifica e partita in trasferta.
+- **Confronto di giornata:** ogni giocatore è confrontato con quelli dello stesso ruolo nella stessa giornata (centro 6; i subentrati con i subentrati). Il voto è arrotondato al mezzo punto.
+- **Chi prende voto:** chi gioca almeno 12 minuti. Sotto i 12 il voto c'è solo con gol, assist, espulsione, autogol o rigore segnato, sbagliato o parato. Con la sola ammonizione decide un'opzione del regolamento; il portiere con i soli gol subiti prende il voto base con il malus.
+
+In alternativa l'admin può usare il rating della fonte o il voto base.
 
 Cosa FootballLite **non** fa: non accede alle API o all'app di Leghe Fantacalcio, non legge pagine di fantacalcio.it o di altri siti (pagelle comprese), non mostra foto di giocatori né loghi (al loro posto ci sono le iniziali), non riproduce articoli.
 
