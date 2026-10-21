@@ -77,8 +77,8 @@ export function RostersPage() {
                     <span className="block truncate font-semibold">{p.name}</span>
                     <span className="block truncate text-xs text-muted">{p.outlook ? p.outlook.fixture ?? prettyTeam(p.info.ext_team) : "Non abbinato alla fonte dati"}</span>
                   </span>
-                  <span className="tabular w-10 shrink-0 text-right text-xs font-bold text-muted" title="Crediti d'asta">{p.cost ?? "–"}</span>
-                  <span className="inline-flex shrink-0 items-center justify-end gap-1">
+                  <span className="tabular shrink-0 rounded-md border border-line bg-surface-2 px-1.5 py-0.5 text-[11px] font-bold text-muted" title="Crediti pagati all'asta">{p.cost ?? "–"} cr</span>
+                  <span className="inline-flex w-12 shrink-0 items-center justify-end gap-1 border-l border-line pl-2" title="Titolarità stimata">
                     {p.outlook?.unavailable ? <AvailabilityIcon unavailable={p.outlook.unavailable} size={18} /> : <><AvailabilityIcon doubtful={p.outlook?.doubtful} /><StarterPercent percent={p.starterPercent} /></>}
                   </span>
                 </li>
