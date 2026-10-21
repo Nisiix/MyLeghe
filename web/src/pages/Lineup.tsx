@@ -659,13 +659,12 @@ function Editor({ teamId, proxyName, round, deadline, started, scored, cfg, curr
         <ol className="flex flex-col divide-y divide-line">
           {benchRows.map((p, i) => (
             <li key={p.id} data-zone={`b:${i}`} className={`flex items-center gap-2 px-4 py-1.5 ${hot(`b:${i}`)} ${drag?.id === p.id ? "opacity-40" : ""}`}>
-              {playerRow(p, <span className="w-4 shrink-0 text-center text-sm font-extrabold text-muted tabular">{i + 1}</span>)}
+              {playerRow(p)}
             </li>
           ))}
           {free.some((p) => benchRoomFor(p.role)) && (
             <li>
               <button className="flex w-full items-center gap-2 px-4 py-2 text-left text-sm text-muted hover:bg-surface-2" onClick={() => setPicking({ role: 0, target: "bench" })}>
-                <span className="w-4 shrink-0 text-center text-sm font-extrabold tabular">{bench.length + 1}</span>
                 <span className="flex size-9 items-center justify-center rounded-full border-2 border-dashed border-line text-lg font-bold">+</span>
                 <span>Aggiungi panchinaro</span>
               </button>
