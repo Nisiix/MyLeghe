@@ -1,4 +1,5 @@
 import { MIN_CALIBRATION_SAMPLES, parseCalendarGrid, parseRosterGrid, type CalendarImport, type Calibration, type ImportResult, type LeagueConfig } from "@footballlite/core";
+import { confirmDialog } from "../components/Confirm";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { InviteShare } from "../components/Invite";
@@ -180,7 +181,7 @@ function UsersCard() {
   const q = useQuery({ queryKey: ["admin-users"], queryFn: () => api<UserRow[]>("/league/admin/users") });
   const [error, setError] = useState<unknown>(null);
   async function reset(u: UserRow) {
-    if (!confirm(`Eliminare il profilo @${u.username}? L'utente dovrà creare di nuovo username e password${u.team ? ` e la squadra ${u.team} tornerà libera` : ""}.`)) return;
+    if (!(await confirmDialog(`L'utente dovrà creare di nuovo username e password${u.team ? ` e la squadra ${u.team} tornerà libera` : ""}.`, { title: `Eliminare il profilo @${u.username}?`, ok: "Elimina", danger: true }))) return;
     setError(null);
     try {
       await api(`/league/admin/users/${u.id}`, { method: "DELETE" });

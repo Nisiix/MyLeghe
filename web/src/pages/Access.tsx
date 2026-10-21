@@ -1,4 +1,5 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { confirmDialog } from "../components/Confirm";
 import { useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { Button, Card, ErrorBox, TeamBadge } from "../components/ui";
@@ -212,7 +213,7 @@ function ChooseTeam({ teams, admin, notice }: { teams: AccessTeam[]; admin: bool
   const [error, setError] = useState<unknown>(null);
   const [busy, setBusy] = useState(false);
   async function pick(t: AccessTeam) {
-    if (!confirm(`Collegare il tuo profilo alla squadra ${t.name}? Potrai cambiarla solo scollegandola dalle impostazioni.`)) return;
+    if (!(await confirmDialog("Potrai cambiarla solo scollegandola dalle impostazioni.", { title: `Collegare il tuo profilo a ${t.name}?`, ok: "Collega" }))) return;
     setBusy(true); setError(null);
     try { await linkTeam(t.id); qc.invalidateQueries(); navigate("/", { replace: true }); } catch (e) { setError(e); } finally { setBusy(false); }
   }

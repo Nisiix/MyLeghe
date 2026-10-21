@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { confirmDialog } from "./Confirm";
 import { regenerateInvite, savedInviteCode } from "../lib/api";
 import { Button } from "./ui";
 
@@ -24,7 +25,7 @@ export function InviteShare({ leagueId, leagueName, admin, initialCode }: { leag
     try { await navigator.clipboard.writeText(text); setMsg("Invito copiato: incollalo dove vuoi."); } catch { setMsg("Non riesco a copiare: seleziona il testo qui sopra."); }
   }
   async function regenerate() {
-    if (!confirm("Generare un nuovo codice invito? Quello precedente smette di valere (chi è già entrato resta nella lega).")) return;
+    if (!(await confirmDialog("Quello precedente smette di valere; chi è già entrato resta nella lega.", { title: "Generare un nuovo codice invito?", ok: "Genera" }))) return;
     setBusy(true); setMsg(null);
     try { setCode(await regenerateInvite(leagueId)); setMsg("Nuovo codice invito generato."); } catch (e) { setMsg((e as Error).message); } finally { setBusy(false); }
   }

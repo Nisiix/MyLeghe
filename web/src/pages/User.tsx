@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { confirmDialog } from "../components/Confirm";
 import { useNavigate } from "react-router-dom";
 import { Button, Card, ErrorBox } from "../components/ui";
 import { unlinkTeam } from "../lib/api";
@@ -16,7 +17,7 @@ export function UserPage() {
   /** Scollega la squadra della rosa dal profilo: alla prossima apertura si sceglie di nuovo la squadra. */
   async function unlink() {
     const team = s?.myTeamId ? names.get(s.myTeamId) ?? "la squadra" : "la squadra";
-    if (!confirm(`Scollegare ${team} dal tuo profilo? Potrai collegare di nuovo una squadra libera.`)) return;
+    if (!(await confirmDialog("Potrai collegare di nuovo una squadra libera.", { title: `Scollegare ${team} dal tuo profilo?`, ok: "Scollega", danger: true }))) return;
     setError(null);
     try { await unlinkTeam(); navigate("/accesso"); } catch (e) { setError(e); }
   }
