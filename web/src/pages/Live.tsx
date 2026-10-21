@@ -1,8 +1,8 @@
 import type { Modifier, TeamMatchScore } from "@footballlite/core";
 import { useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
-import { Button, Card, Empty, ErrorBox, RoleTag, Sheet, Spinner, StarterPercent, TeamBadge, fmt } from "../components/ui";
-import { useCalendar, useLeague, useLineups, useLive, useOutlook, useRound, type CalendarRow, type LeagueData, type Lineup, type LiveData, type Outlook } from "../lib/data";
+import { Button, Card, Empty, ErrorBox, RoleTag, Sheet, Spinner, TeamBadge, fmt } from "../components/ui";
+import { useCalendar, useLeague, useLineups, useLive, useRound, type CalendarRow, type LeagueData, type Lineup, type LiveData } from "../lib/data";
 import { useSession } from "../lib/session";
 import { SIM_DEFAULT_VOTE, leagueMatches, matchCalc, myMatch, rosterOf, simKey, teamCalc, type MatchCalc, type Named, type SimOverrides, type TeamCalc } from "../lib/team";
 
@@ -14,7 +14,6 @@ export function LivePage() {
   const md = round.data?.matchday;
   const lineups = useLineups(md);
   const live = useLive(md, round.data?.phase === "live");
-  const outlook = useOutlook();
   const [params, setParams] = useSearchParams();
   // Il risultato stimato (chi deve ancora giocare vale 6) è l'unica vista, come «Simula risultato» di Leghe Fantacalcio.
   const simulate = true;
@@ -44,14 +43,11 @@ export function LivePage() {
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex items-center gap-3">
-        <h1 className="scoreboard flex-1 text-2xl leading-none">Live</h1>
-        <label className="flex min-w-0 items-center gap-1 text-xs text-muted">
-          <span className="sr-only">Partita</span>
-          <select value={match.home_team_id} onChange={(e) => select(Number(e.target.value))} aria-label="Partita della giornata" className="max-w-[220px] rounded-full border border-line bg-surface px-2 py-1 text-xs font-semibold text-ink">
-            {shown.map((m) => <option key={m.home_team_id} value={m.home_team_id}>{names.get(m.home_team_id)} – {names.get(m.away_team_id)}{mineOf(m) ? " (la tua)" : ""}</option>)}
-          </select>
-        </label>
+      <h1 className="scoreboard text-2xl leading-none">Live</h1>
+      <div className="-mt-1 flex justify-center">
+        <select value={match.home_team_id} onChange={(e) => select(Number(e.target.value))} aria-label="Partita della giornata" className="max-w-full rounded-full border border-line bg-surface px-3 py-1.5 text-center text-sm font-semibold text-ink">
+          {shown.map((m) => <option key={m.home_team_id} value={m.home_team_id}>{names.get(m.home_team_id)} – {names.get(m.away_team_id)}{mineOf(m) ? " (la tua)" : ""}</option>)}
+        </select>
       </div>
       {!started && <p className="-mt-2 text-xs text-muted">Prima del calcio d'inizio si vede chi ha già inserito la formazione; le formazioni delle altre squadre compaiono dal primo fischio. Il risultato è stimato con fantavoto 6 per chi deve giocare.</p>}
       <Scoreboard match={match} names={names} calc={current} simulate={simulate} phase={round.data!.phase} />
@@ -62,7 +58,7 @@ export function LivePage() {
         </section>
       )}
 
-      <MatchDetail match={match} names={names} data={data} lineupOf={lineupOf} calc={current} outlook={outlook.data?.players} live={live.data} myTeamId={s?.myTeamId ?? null} started={started}
+      <MatchDetail match={match} names={names} data={data} lineupOf={lineupOf} calc={current} live={live.data} myTeamId={s?.myTeamId ?? null} started={started}
         action={started ? <button className="text-xs font-semibold text-accent underline" onClick={() => setEditing(true)}>Modifica voti{Object.keys(overrides).length ? " ✓" : ""}</button> : null} />
 
       <ModsCard calc={current} names={names} match={match} />
@@ -71,27 +67,6 @@ export function LivePage() {
         <Link to="/formazione" className="text-center text-sm font-semibold text-danger underline">Modifica formazione (giornata iniziata)</Link>
       )}
 
-      <Card title="Altri punteggi">
-        <ul className="flex flex-col divide-y divide-line">
-          {shown.filter((m) => m !== match).map((m) => {
-            const r = mc(m, simulate);
-            const hp = r.result?.home.final ?? r.home?.score.total ?? null;
-            const ap = r.result?.away.final ?? r.away?.score.total ?? null;
-            return (
-              <li key={m.home_team_id}>
-                <button onClick={() => select(m.home_team_id)} className="grid w-full grid-cols-[1fr_auto_1fr] items-center gap-2 py-2.5 text-left text-sm" aria-label={`Dettaglio ${names.get(m.home_team_id)} – ${names.get(m.away_team_id)}`}>
-                  <span className="truncate">{names.get(m.home_team_id)}{!r.home && <span className="block text-[10px] text-danger">formazione mancante</span>}</span>
-                  <span className="tabular text-center">
-                    {r.result ? <><b className="scoreboard text-lg">{r.result.goals[0]}-{r.result.goals[1]}</b><span className="block text-[10px] text-muted">{fmt(hp)} – {fmt(ap)}</span></> : <span className="text-[10px] text-muted">{hp !== null ? fmt(hp) : ""} – {ap !== null ? fmt(ap) : ""}</span>}
-                  </span>
-                  <span className="truncate text-right">{names.get(m.away_team_id)}{!r.away && <span className="block text-[10px] text-danger">formazione mancante</span>}</span>
-                </button>
-              </li>
-            );
-          })}
-        </ul>
-        <p className="mt-2 text-[11px] text-muted">Tocca una partita per il dettaglio delle due formazioni. Risultati stimati (chi deve ancora giocare vale 6). Voti stimati da FootballLite: non sono i voti ufficiali. I risultati ufficiali compaiono quando l'admin reimporta il calendario da Leghe Fantacalcio{calendar.importedAt ? ` (ultimo import: ${new Date(calendar.importedAt).toLocaleString("it-IT", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })})` : ""}.</p>
-      </Card>
 
       {editing && (
         <SimEditor onClose={() => setEditing(false)} teams={[current.home, current.away]} teamIds={[match.home_team_id, match.away_team_id]} names={names} overrides={overrides} setOverrides={setOverrides} />
@@ -158,9 +133,9 @@ function ModsCard({ calc, names, match }: { calc: MatchCalc; names: Map<number, 
  * Dettaglio della partita: i giocatori delle due squadre in verticale, su due colonne nello stesso contenitore,
  * con il fantavoto (live o ipotetico 6 per chi deve giocare) e la titolarità stimata.
  */
-function MatchDetail({ match, names, data, lineupOf, calc, outlook, live, myTeamId, started, action }: {
+function MatchDetail({ match, names, data, lineupOf, calc, live, myTeamId, started, action }: {
   match: CalendarRow; names: Map<number, string>; data: LeagueData; lineupOf: (t: number) => Lineup | undefined;
-  calc: MatchCalc; outlook?: Record<string, Outlook>; live?: LiveData; myTeamId: number | null; started: boolean; action?: React.ReactNode;
+  calc: MatchCalc; live?: LiveData; myTeamId: number | null; started: boolean; action?: React.ReactNode;
 }) {
   const column = (tid: number, t: TeamCalc | null) => {
     const lineup = lineupOf(tid);
@@ -169,7 +144,6 @@ function MatchDetail({ match, names, data, lineupOf, calc, outlook, live, myTeam
     const subsOut = new Set(t?.score.substitutions.filter((x) => x.in).map((x) => x.out));
     const row = (p: Named, i?: number) => {
       const info = roster.get(p.id);
-      const o = info?.ext_id ? outlook?.[info.ext_id] : undefined;
       const ev = info?.ext_id ? live?.events[info.ext_id] : undefined;
       const tags = ev ? [...Array(ev.goals + ev.penaltyScored).fill("⚽"), ...Array(ev.assists).fill("A"), ...Array(ev.yellow).fill("🟨"), ...Array(ev.red).fill("🟥"), ...Array(ev.ownGoals).fill("AG")] : [];
       const isCaptain = t?.score.captainId === p.id;
@@ -184,9 +158,9 @@ function MatchDetail({ match, names, data, lineupOf, calc, outlook, live, myTeam
             </span>
             {tags.length > 0 && <span className="block truncate text-[10px] leading-tight text-muted">{tags.join(" ")}</span>}
           </span>
-          <span className="flex shrink-0 items-center gap-1">
-            <StarterPercent percent={o?.starterPercent} />
-            <span className={`w-8 text-right text-[13px] tabular ${p.state === "pending" ? "text-muted" : "font-bold"}`}>{p.state === "absent" ? "s.v." : p.fantavote !== null ? fmt(p.fantavote) : "–"}</span>
+          {/* Voto in verde quando viene dal live (statistiche reali); grigio se è il 6 ipotetico di chi deve giocare. */}
+          <span className={`w-9 shrink-0 text-right text-[13px] tabular ${p.state === "played" ? "font-bold text-accent" : p.state === "pending" ? "text-muted" : "font-bold"}`}>
+            {p.state === "absent" ? "s.v." : p.fantavote !== null ? fmt(p.fantavote) : "–"}
           </span>
         </li>
       );
@@ -223,7 +197,7 @@ function MatchDetail({ match, names, data, lineupOf, calc, outlook, live, myTeam
   return (
     <Card title="Formazioni" action={action}>
       <div className="grid grid-cols-2 gap-3">{column(match.home_team_id, calc.home)}{column(match.away_team_id, calc.away)}</div>
-      <p className="mt-2 text-[11px] text-muted">Voto: fantavoto live, oppure 6 ipotetico per chi deve ancora giocare. Accanto la titolarità stimata. ↑ entra, ↓ esce.</p>
+      <p className="mt-2 text-[11px] text-muted">Voto in verde: fantavoto live; in grigio: 6 ipotetico per chi deve ancora giocare. ↑ entra, ↓ esce.</p>
     </Card>
   );
 }
