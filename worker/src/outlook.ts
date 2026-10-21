@@ -6,6 +6,9 @@ import { requireSession, type AppEnv } from "./auth";
 import type { Env } from "./env";
 import { loadConfig } from "./league";
 import { activeRound, kvRead, matchesOf, opponentFactor, standings, type SaMatch } from "./schedule";
+
+/** Sigla a tre lettere in maiuscolo (dalla fonte, altrimenti dalle prime lettere del nome). */
+const tla = (t: string | null, name: string | null) => (t ?? (name ?? "").replace(/[^A-Za-z]/g, "").slice(0, 3)).toUpperCase();
 import { HISTORY_ROUNDS } from "./sync";
 
 export const outlook = new Hono<AppEnv>();
@@ -53,6 +56,7 @@ export interface PlayerOutlookOut {
   avgFantavote: number | null;
   opponentFactor: number;
   opponent: string | null;
+  fixture: string | null;
   kickoff: number | null;
   matchState: "pending" | "live" | "finished";
 }
@@ -117,6 +121,8 @@ export async function computeOutlook(env: Env, leagueId: string): Promise<{ matc
       statusUpdatedAt: st?.updated_at ?? null,
       starterPercent: starterProbability(outlook),
       opponent: match ? `${home ? "vs" : "@"} ${(home ? match.away_tla : match.home_tla) ?? (home ? match.away_name : match.home_name)}` : null,
+      // Sigle Serie A delle due squadre della partita, casa-trasferta (es. "INT-JUV").
+      fixture: match ? `${tla(match.home_tla, match.home_name)}-${tla(match.away_tla, match.away_name)}` : null,
       kickoff: match?.kickoff ?? null,
       matchState: stateOf(match),
     };

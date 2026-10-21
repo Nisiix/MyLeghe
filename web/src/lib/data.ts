@@ -56,6 +56,8 @@ export interface Outlook {
   avgFantavote: number | null;
   opponentFactor: number;
   opponent: string | null;
+  /** Sigle delle due squadre della partita di Serie A, casa-trasferta (es. "INT-JUV"). */
+  fixture?: string | null;
   kickoff: number | null;
   matchState: "pending" | "live" | "finished";
 }
