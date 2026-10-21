@@ -56,7 +56,6 @@ export function LineupPage() {
   const last = current ? undefined : previous.data?.lineups.find((l) => l.team_id === target && !l.hidden && Array.isArray(l.starters));
   return (
     <Editor key={`${target}-${current?.id ?? "new"}`} teamId={target} proxyName={proxyFor?.name} round={round.data!.lineupMatchday} deadline={round.data!.lineupDeadline} started={started}
-      liveLabel={round.data!.phase === "upcoming" ? "Altre formazioni" : "Live"}
       scored={scored} cfg={cfg} current={current} last={last} unmatched={unmatched} admin={!!s.admin} savedMessage={saved} onSaved={setSaved} />
   );
 }
@@ -77,8 +76,8 @@ const SINGULAR: Record<number, string> = { 1: "portiere", 2: "difensore", 3: "ce
  * possibili (titolare, panchina, riserve: quelle diverse da dove si trova); un giocatore si può anche trascinare sul
  * posto di un altro (scambio), su uno slot libero o in panchina.
  */
-function Editor({ teamId, proxyName, round, deadline, started, liveLabel, scored, cfg, current, last, unmatched, admin, savedMessage, onSaved }: {
-  teamId: number; proxyName?: string; round: number; deadline: number; started: boolean; liveLabel: string; scored: Row[]; cfg: LeagueConfig; current?: Lineup; last?: Lineup; unmatched: number; admin: boolean;
+function Editor({ teamId, proxyName, round, deadline, started, scored, cfg, current, last, unmatched, admin, savedMessage, onSaved }: {
+  teamId: number; proxyName?: string; round: number; deadline: number; started: boolean; scored: Row[]; cfg: LeagueConfig; current?: Lineup; last?: Lineup; unmatched: number; admin: boolean;
   savedMessage: string | null; onSaved: (text: string | null) => void;
 }) {
   const qc = useQueryClient();
@@ -542,22 +541,19 @@ function Editor({ teamId, proxyName, round, deadline, started, liveLabel, scored
           <div className="flex shrink-0 flex-col items-end text-right">
             <button onClick={() => { setPasting(true); setPasteError(null); }} className="mb-1 rounded-full border border-white/50 px-2.5 py-0.5 text-[11px] font-bold hover:bg-white/10">Importa rosa</button>
             {!started && <div className="mb-0.5 inline-block rounded-full bg-white/15 px-2 py-0.5 text-[11px] font-bold tabular">− {formatCountdown(deadline - now)}</div>}
-            <div className="text-[11px] text-white/70">Punteggio atteso <b className="scoreboard tabular text-base text-white">{fmt(expected)}</b></div>
+            <div className="text-[11px] text-white/70">Punteggio atteso <b className="scoreboard tabular text-base text-white">{fmt(Math.round(expected * 2) / 2)}</b></div>
           </div>
         </div>
         <div className="mt-3 flex gap-2">
-          <Link to="/live" className="flex flex-1 items-center justify-center gap-1.5 rounded-full border border-white/50 px-2 py-2 text-sm font-bold hover:bg-white/10">
-            {liveLabel === "Live" && <span className="size-2 animate-pulse rounded-full bg-danger" aria-hidden />}{liveLabel}
-          </Link>
+          <button type="button" aria-pressed={listMode} onClick={() => setListMode((v) => !v)} className="flex flex-1 items-center justify-center rounded-full border border-white/50 px-2 py-2 text-sm font-bold hover:bg-white/10">
+            {listMode ? "Modalità mantra" : "Modalità lista"}
+          </button>
           <button type="button" aria-pressed={!!suggested} onClick={toggleSuggestion}
             className={`flex flex-1 items-center justify-center gap-1.5 rounded-full border px-2 py-2 text-sm font-bold transition ${suggested ? "border-card bg-card text-card-ink" : "border-white/50 hover:bg-white/10"}`}>
             <svg viewBox="0 0 24 24" className="size-4" fill={suggested ? "currentColor" : "none"} stroke="currentColor" strokeWidth={2} aria-hidden><path d="M12 3l2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1-4.4-4.3 6.1-.9z" /></svg>
             {suggested ? "Consigliata ✓" : "Consigliata"}
           </button>
         </div>
-        <button type="button" aria-pressed={listMode} onClick={() => setListMode((v) => !v)} className="mt-2 w-full rounded-full border border-white/40 py-1.5 text-xs font-bold hover:bg-white/10">
-          {listMode ? "Modalità mantra" : "Modalità lista"}
-        </button>
       </section>
 
       <div className="flex items-center gap-2 overflow-x-auto border-b border-line bg-surface px-3 py-2" role="radiogroup" aria-label="Modulo">

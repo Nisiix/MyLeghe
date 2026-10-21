@@ -79,28 +79,33 @@ export function scoreCandidate(rosterName: string, candidate: CandidatePlayer, r
   // può essere un diminutivo o una forma abbreviata dell'altra ("Nico Paz" / "Nicolás Paz"): vale con una piccola penalità.
   const used = new Set<number>();
   let partial = 0;
+  const missing: string[] = [];
   for (const s of surname) {
     let idx = words.findIndex((w, i) => !used.has(i) && sameWord(s, w));
     if (idx < 0 && surname.length > 1) {
       idx = words.findIndex((w, i) => !used.has(i) && prefixWord(s, w));
       if (idx >= 0) partial++;
     }
-    if (idx < 0) {
-      // "Mc Tominay" scritto staccato contro "McTominay": le parole del cognome unite formano una sola parola del candidato.
-      const joined = surname.join("");
-      const j = surname.length > 1 && used.size === 0 ? words.findIndex((w, i) => !used.has(i) && sameWord(joined, w)) : -1;
-      if (j < 0) return 0;
-      used.add(j);
-      partial++;
-      break;
-    }
+    if (idx < 0) { missing.push(s); continue; }
     used.add(idx);
+  }
+  if (missing.length) {
+    // "Mc Tominay" scritto staccato contro "McTominay": le parole del cognome unite formano una sola parola del candidato.
+    const joined = surname.join("");
+    const j = used.size === 0 && surname.length > 1 ? words.findIndex((w) => sameWord(joined, w)) : -1;
+    if (j >= 0) { used.add(j); partial++; }
+    // Una parola del cognome composto può mancare nella fonte ("Zambo Anguissa" / "Frank Anguissa"): vale solo se l'altra
+    // è il cognome vero e proprio (l'ultima parola del candidato) e quella mancante non è una particella (di, de, van…).
+    else if (missing.length === 1 && surname.length > 1 && missing[0].length >= 4 && used.has(words.length - 1)) partial += 2;
+    else return 0;
   }
   let score = 0.6 + 0.1 * Math.min(surname.length, 2) - 0.05 * partial;
 
   // Iniziali: devono corrispondere all'inizio delle altre parole (es. "Se." → Sebastiano).
   const others = words.filter((_, i) => !used.has(i));
-  if (initials.length) {
+  if (initials.length && words.length === 1) {
+    // La fonte ha un nome unico (Ederson, Vitinha): le iniziali del file ("Ederson D.S.") non si possono verificare, né premiare né punire.
+  } else if (initials.length) {
     const ok = initials.every((ini) => others.some((w) => w.startsWith(ini.replace(/\?/g, "")) || sameWord(ini, w.slice(0, ini.length))));
     score += ok ? 0.2 : -0.35;
   } else if (others.length === 0) {

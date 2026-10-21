@@ -127,6 +127,19 @@ describe("abbinamento nomi", () => {
     expect(matchPlayer("Nico", 3, pool5).id).toBeNull();
   });
 
+  it("abbina nomi unici con iniziali nel file e cognomi composti con una parola in meno nella fonte", () => {
+    const pool7 = [
+      { id: 80, name: "Ederson", role: 3 as const }, { id: 81, name: "Vitinha", role: 4 as const },
+      { id: 82, name: "Frank Anguissa", role: 3 as const }, { id: 83, name: "Lorenzo Pellegrini", role: 3 as const }, { id: 84, name: "Giovanni Di Lorenzo", role: 2 as const },
+    ];
+    expect(matchPlayer("Ederson D.S.", 3, pool7).id).toBe(80);
+    expect(matchPlayer("Vitinha O.", 4, pool7).id).toBe(81);
+    expect(matchPlayer("Zambo Anguissa", 3, pool7).id).toBe(82);
+    expect(matchPlayer("Di Lorenzo", 2, pool7).id).toBe(84);
+    // "Di Lorenzo" non deve mai prendere Lorenzo Pellegrini per la sola parola "Lorenzo".
+    expect(matchPlayer("Di Lorenzo", 2, [pool7[3]]).id).toBeNull();
+  });
+
   it("abbina cognomi scritti staccati o con accenti rovinati in più byte (Mc Tominay, Le??o)", () => {
     const pool6 = [{ id: 70, name: "Scott McTominay", role: 3 as const }, { id: 71, name: "Rafael Leão", role: 4 as const }, { id: 72, name: "Hakan Çalhanoğlu", role: 3 as const }];
     expect(matchPlayer("Mc Tominay", 3, pool6).id).toBe(70);

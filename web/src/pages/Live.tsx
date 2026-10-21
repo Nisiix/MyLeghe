@@ -27,13 +27,11 @@ export function LivePage() {
   const cfg = data.league.config;
   const matches = leagueMatches(calendar.data, md!);
   const started = round.data!.phase !== "upcoming";
-  if (!matches.length) return <Card title={started ? "Live" : "Altre formazioni"}><Empty>Nessuna partita di lega in questa giornata (calendario non importato o giornata di riposo).</Empty></Card>;
-  // Prima del calcio d'inizio («Altre formazioni») la propria partita non compare: la si gestisce dalla pagina Formazione.
+  if (!matches.length) return <Card title="Live"><Empty>Nessuna partita di lega in questa giornata (calendario non importato o giornata di riposo).</Empty></Card>;
+  // Di base la propria partita; con il filtro in alto si passa alle altre partite della giornata.
   const mineOf = (m: CalendarRow) => m.home_team_id === s?.myTeamId || m.away_team_id === s?.myTeamId;
-  const shown = started ? matches : matches.filter((m) => !mineOf(m));
-  if (!shown.length) return <Card title="Altre formazioni"><Empty>Nessun'altra partita di lega in questa giornata.</Empty></Card>;
-
-  const selectedHome = Number(params.get("partita")) || (started ? myMatch(calendar.data, md!, s?.myTeamId)?.home_team_id : undefined) || shown[0].home_team_id;
+  const shown = matches;
+  const selectedHome = Number(params.get("partita")) || myMatch(calendar.data, md!, s?.myTeamId)?.home_team_id || shown[0].home_team_id;
   const match = shown.find((m) => m.home_team_id === selectedHome) ?? shown[0];
   const lineupOf = (tid: number) => lineups.data?.lineups.find((l) => l.team_id === tid);
   const calc = (tid: number, sim: boolean) => teamCalc(tid, rosterOf(data, tid), lineupOf(tid), live.data, cfg, sim, overrides);
@@ -46,8 +44,16 @@ export function LivePage() {
 
   return (
     <div className="flex flex-col gap-4">
-      <h1 className="scoreboard text-2xl leading-none">{started ? "Live" : "Altre formazioni"}</h1>
-      {!started && <p className="-mt-2 text-xs text-muted">Le partite delle altre squadre: le formazioni si vedono dal primo calcio d'inizio, fino ad allora qui vedi chi ha già inserito la sua. La tua partita è in Home e nella pagina Formazione.</p>}
+      <div className="flex items-center gap-3">
+        <h1 className="scoreboard flex-1 text-2xl leading-none">Live</h1>
+        <label className="flex min-w-0 items-center gap-1 text-xs text-muted">
+          <span className="sr-only">Partita</span>
+          <select value={match.home_team_id} onChange={(e) => select(Number(e.target.value))} aria-label="Partita della giornata" className="max-w-[220px] rounded-full border border-line bg-surface px-2 py-1 text-xs font-semibold text-ink">
+            {shown.map((m) => <option key={m.home_team_id} value={m.home_team_id}>{names.get(m.home_team_id)} – {names.get(m.away_team_id)}{mineOf(m) ? " (la tua)" : ""}</option>)}
+          </select>
+        </label>
+      </div>
+      {!started && <p className="-mt-2 text-xs text-muted">Prima del calcio d'inizio si vede chi ha già inserito la formazione; le formazioni delle altre squadre compaiono dal primo fischio. Il risultato è stimato con fantavoto 6 per chi deve giocare.</p>}
       <Scoreboard match={match} names={names} calc={current} simulate={simulate} phase={round.data!.phase} />
       {match.home_goals !== null && (
         <section className="rounded-xl border border-accent/40 bg-accent/10 p-3 text-sm">

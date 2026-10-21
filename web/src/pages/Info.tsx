@@ -1,15 +1,23 @@
 import { Card } from "../components/ui";
 import { DataStatusDetails } from "../components/DataStatus";
+import { useSession } from "../lib/session";
+
+/** Lo stato tecnico dei dati è riservato a chi sviluppa l'app. */
+const DEVELOPER = "nisiix";
 
 /** Informazioni: stato dei dati, fonti e note legali. */
 export function InfoPage() {
+  const s = useSession();
+  const developer = (s?.username ?? "").toLowerCase() === DEVELOPER;
   return (
     <div className="flex flex-col gap-4">
       <h1 className="px-1 text-2xl font-extrabold leading-none">Informazioni</h1>
 
-      <Card title="Stato dei dati">
-        <DataStatusDetails />
-      </Card>
+      {developer && (
+        <Card title="Stato dei dati">
+          <DataStatusDetails />
+        </Card>
+      )}
 
       <Card title="Fonti dei dati">
         <ul className="flex flex-col gap-1.5 text-sm">

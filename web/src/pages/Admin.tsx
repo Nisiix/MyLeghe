@@ -247,6 +247,8 @@ function SourcesNote() {
 function Unmatched() {
   const qc = useQueryClient();
   const q = useQuery({ queryKey: ["unmatched"], queryFn: () => api<UnmatchedRow[]>("/league/admin/unmatched") });
+  // La sezione compare solo se ci sono giocatori da abbinare.
+  const hidden = !q.isLoading && !q.data?.length;
   const [search, setSearch] = useState<Record<string, { id: number; name: string; team_name: string }[]>>({});
 
   async function assign(r: UnmatchedRow, extId: number) {
@@ -272,6 +274,7 @@ function Unmatched() {
     } catch (e) { setRematchMsg((e as Error).message); }
   }
 
+  if (hidden) return null;
   return (
     <Card title="Abbinamenti" action={<button className="text-sm font-semibold text-accent" onClick={rematch}>Riprova automatico</button>}>
       <SourcesNote />

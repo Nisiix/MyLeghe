@@ -86,10 +86,13 @@ function RoundCard({ round }: { round: Round }) {
             <p className="mt-3 text-xs text-chalk/80">Scegli il tuo utente nelle <Link to="/utente" className="underline">impostazioni utente</Link> per schierare.</p>
           )}
         </div>
-        {s?.myTeamId ? (
+        {started ? (
+          <div className="flex flex-col gap-2">
+            <Link to="/live" className="block"><Button variant="card" className="w-full py-3 text-base">Live</Button></Link>
+            {s?.myTeamId && round.lineupMatchday !== round.matchday && <Link to="/formazione" className="block"><Button variant="ghost" className="w-full border border-white/40 py-2 text-sm text-white">Formazione {round.lineupMatchday}ª giornata</Button></Link>}
+          </div>
+        ) : s?.myTeamId ? (
           <Link to="/formazione" className="block"><Button variant="card" className="w-full py-3 text-base">Formazione</Button></Link>
-        ) : started ? (
-          <Link to="/live" className="block"><Button variant="card" className="w-full py-3 text-base">Live</Button></Link>
         ) : null}
       </div>
     </section>

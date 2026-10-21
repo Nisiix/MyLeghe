@@ -22,7 +22,7 @@ const Icon = ({ name, className = "size-6", strokeWidth = 1.8 }: { name: string;
   <svg viewBox="0 0 24 24" className={className} fill="none" stroke="currentColor" strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round" aria-hidden>{ICONS[name]}</svg>
 );
 
-/** Menu della lega (in alto a sinistra): gestione della lega per l'admin, leghe del dispositivo, altra lega o nuova lega. */
+/** Menu della lega (in alto a sinistra): leghe del dispositivo, altra lega o nuova lega. */
 function LeagueMenu({ open, onClose }: { open: boolean; onClose: () => void }) {
   const s = useSession();
   const leagues = useLeagues();
@@ -31,14 +31,6 @@ function LeagueMenu({ open, onClose }: { open: boolean; onClose: () => void }) {
   const go = (search: string) => { onClose(); session.detach(); navigate(`/accesso?${search}`); };
   return (
     <Sheet open={open} onClose={onClose} title={s?.league.name ?? "Lega"}>
-      {s?.admin && (
-        <button onClick={() => { onClose(); navigate("/admin"); }}
-          className="mb-4 flex w-full items-center gap-3 rounded-xl border border-line bg-surface-2 px-3 py-3 text-left font-bold">
-          <Icon name="shield" className="size-5 text-muted" />
-          <span className="flex-1">Gestione lega<span className="block text-xs font-normal text-muted">Rose, calendario, regolamento, utenti e abbinamenti</span></span>
-          <span className="text-muted" aria-hidden>›</span>
-        </button>
-      )}
       <h3 className="mb-2 text-xs font-bold uppercase tracking-wide text-muted">Le tue leghe</h3>
       <ul className="mb-4 flex flex-col gap-2">
         {leagues.map((l) => (
@@ -60,15 +52,16 @@ function LeagueMenu({ open, onClose }: { open: boolean; onClose: () => void }) {
   );
 }
 
-/** Barra in basso: Home e Rose. Formazione e Live si aprono dalla Home (pulsante «Formazione») e dalla Formazione (pulsante «Live»). */
+/** Barra in basso: Home, Live e Rose. La Formazione si apre dalla Home (pulsante «Formazione»). */
 function TabBar() {
   const items = [
     { to: "/", label: "Home", icon: "home", end: true },
+    { to: "/live", label: "Live", icon: "live" },
     { to: "/rose", label: "Rose", icon: "rosters" },
   ];
   return (
     <nav aria-label="Sezioni" className="fixed inset-x-0 bottom-0 z-40 border-t border-line bg-surface safe-nav">
-      <ul className="mx-auto grid max-w-lg grid-cols-2">
+      <ul className="mx-auto grid max-w-lg grid-cols-3">
         {items.map((i) => (
           <li key={i.to}>
             <NavLink to={i.to} end={i.end}
@@ -94,6 +87,7 @@ function MainMenu({ open, onClose }: { open: boolean; onClose: () => void }) {
   const theme = useTheme();
   const items = [
     { to: "/utente", label: "Impostazioni utente", icon: "user" },
+    ...(s?.admin ? [{ to: "/admin", label: "Gestione lega", icon: "shield" }] : []),
     { to: "/notifiche", label: "Notifiche", icon: "bell" },
     { to: "/informazioni", label: "Informazioni", icon: "info" },
   ];
@@ -126,7 +120,7 @@ export function Layout() {
   const navigate = useNavigate();
   const loc = useLocation();
   const myTeam = league.data?.teams.find((t) => t.id === s?.myTeamId);
-  const root = ["/", "/rose"].includes(loc.pathname);
+  const root = ["/", "/live", "/rose"].includes(loc.pathname);
   const [leagues, setLeagues] = useState(false);
   const [menu, setMenu] = useState(false);
   return (
@@ -138,7 +132,7 @@ export function Layout() {
           </button>
         )}
         {myTeam ? <TeamBadge id={myTeam.id} name={myTeam.name} size={36} /> : null}
-        <button onClick={() => setLeagues(true)} className="min-w-0 flex-1 text-left" aria-label={s?.admin ? "Menu della lega: gestione lega e cambio lega" : "Cambia lega"}>
+        <button onClick={() => setLeagues(true)} className="min-w-0 flex-1 text-left" aria-label="Cambia lega">
           <div className="truncate text-base font-extrabold leading-tight">{s?.league.name ?? "FootballLite"} <span className="text-white/60">▾</span></div>
           <div className="truncate text-xs text-white/70">{myTeam ? myTeam.name : s?.admin ? "Admin" : "Solo visualizzazione"}</div>
         </button>
