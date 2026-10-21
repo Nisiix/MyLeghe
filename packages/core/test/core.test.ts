@@ -127,6 +127,15 @@ describe("abbinamento nomi", () => {
     expect(matchPlayer("Nico", 3, pool5).id).toBeNull();
   });
 
+  it("abbina cognomi scritti staccati o con accenti rovinati in più byte (Mc Tominay, Le??o)", () => {
+    const pool6 = [{ id: 70, name: "Scott McTominay", role: 3 as const }, { id: 71, name: "Rafael Leão", role: 4 as const }, { id: 72, name: "Hakan Çalhanoğlu", role: 3 as const }];
+    expect(matchPlayer("Mc Tominay", 3, pool6).id).toBe(70);
+    expect(matchPlayer("Le��o", 4, pool6).id).toBe(71);
+    expect(matchPlayer("Le�o", 4, pool6).id).toBe(71);
+    expect(matchPlayer("Calhanoglu", 3, pool6).id).toBe(72);
+    expect(matchPlayer("Çalhanoğlu", 3, pool6).id).toBe(72);
+  });
+
   it("il nome breve dello stesso giocatore non crea ambiguità", () => {
     const pool3 = [
       { id: 40, name: "Guglielmo Vicario", role: 1 as const }, { id: 40, name: "G. Vicario", role: 1 as const },

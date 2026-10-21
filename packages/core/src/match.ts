@@ -36,6 +36,7 @@ export function normalizeName(s: string): string {
     .replace(/'/g, "") // N'Dicka e Ndicka sono lo stesso cognome
     .replace(/-/g, " ")
     .replace(/\s+/g, " ")
+    .replace(/\?\?+/g, "?") // un accento rovinato in più byte vale comunque una lettera
     .trim();
 }
 
@@ -84,7 +85,15 @@ export function scoreCandidate(rosterName: string, candidate: CandidatePlayer, r
       idx = words.findIndex((w, i) => !used.has(i) && prefixWord(s, w));
       if (idx >= 0) partial++;
     }
-    if (idx < 0) return 0;
+    if (idx < 0) {
+      // "Mc Tominay" scritto staccato contro "McTominay": le parole del cognome unite formano una sola parola del candidato.
+      const joined = surname.join("");
+      const j = surname.length > 1 && used.size === 0 ? words.findIndex((w, i) => !used.has(i) && sameWord(joined, w)) : -1;
+      if (j < 0) return 0;
+      used.add(j);
+      partial++;
+      break;
+    }
     used.add(idx);
   }
   let score = 0.6 + 0.1 * Math.min(surname.length, 2) - 0.05 * partial;
