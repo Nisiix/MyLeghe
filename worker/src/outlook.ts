@@ -8,7 +8,12 @@ import { loadConfig } from "./league";
 import { activeRound, kvRead, matchesOf, opponentFactor, standings, type SaMatch } from "./schedule";
 
 /** Sigla a tre lettere in maiuscolo (dalla fonte, altrimenti dalle prime lettere del nome). */
-const tla = (t: string | null, name: string | null) => (t ?? (name ?? "").replace(/[^A-Za-z]/g, "").slice(0, 3)).toUpperCase();
+/** Sigle della fonte diverse da quelle in uso in Serie A. */
+const TLA_FIX: Record<string, string> = { USL: "LEC", HVR: "VER" };
+const tla = (t: string | null, name: string | null) => {
+  const code = (t ?? (name ?? "").replace(/[^A-Za-z]/g, "").slice(0, 3)).toUpperCase();
+  return TLA_FIX[code] ?? code;
+};
 import { HISTORY_ROUNDS } from "./sync";
 
 export const outlook = new Hono<AppEnv>();
@@ -120,7 +125,7 @@ export async function computeOutlook(env: Env, leagueId: string): Promise<{ matc
       expectedReturn: st?.expected_return ?? null,
       statusUpdatedAt: st?.updated_at ?? null,
       starterPercent: starterProbability(outlook),
-      opponent: match ? `${home ? "vs" : "@"} ${(home ? match.away_tla : match.home_tla) ?? (home ? match.away_name : match.home_name)}` : null,
+      opponent: match ? `${home ? "vs" : "@"} ${tla(home ? match.away_tla : match.home_tla, home ? match.away_name : match.home_name)}` : null,
       // Sigle Serie A delle due squadre della partita, casa-trasferta (es. "INT-JUV").
       fixture: match ? `${tla(match.home_tla, match.home_name)}-${tla(match.away_tla, match.away_name)}` : null,
       kickoff: match?.kickoff ?? null,
