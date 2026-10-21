@@ -1,10 +1,10 @@
 import { ROLE_NAME, ROLES } from "@footballlite/core";
 import { useSearchParams } from "react-router-dom";
-import { Card, Empty, ErrorBox, RoleTag, Spinner, StarterPercent, TeamBadge } from "../components/ui";
+import { AvailabilityIcon, Card, Empty, ErrorBox, RoleTag, Spinner, StarterPercent, TeamBadge } from "../components/ui";
 import { Figurine } from "../components/Figurine";
 import { useLeague, useOutlook } from "../lib/data";
 import { useSession } from "../lib/session";
-import { outlookStatus, rosterOf, scoredRoster } from "../lib/team";
+import { prettyTeam, rosterOf, scoredRoster } from "../lib/team";
 
 /** Rose della lega: la propria e quelle degli altri, con titolarità stimata, stato e crediti. */
 export function RostersPage() {
@@ -75,10 +75,12 @@ export function RostersPage() {
                   <Figurine name={p.name} role={p.role} team={p.info.ext_team} size={40} />
                   <span className="min-w-0 flex-1">
                     <span className="block truncate font-semibold">{p.name}</span>
-                    <span className="block truncate text-xs text-muted">{[p.info.ext_team, p.outlook?.opponent ? `vs ${p.outlook.opponent}` : null, outlookStatus(p.outlook)].filter(Boolean).join(" · ")}</span>
+                    <span className="block truncate text-xs text-muted">{p.outlook ? p.outlook.fixture ?? prettyTeam(p.info.ext_team) : "Non abbinato alla fonte dati"}</span>
                   </span>
                   <span className="tabular w-10 shrink-0 text-right text-xs font-bold text-muted" title="Crediti d'asta">{p.cost ?? "–"}</span>
-                  <span className="w-11 shrink-0 text-right"><StarterPercent percent={p.starterPercent} /></span>
+                  <span className="inline-flex shrink-0 items-center justify-end gap-1">
+                    {p.outlook?.unavailable ? <AvailabilityIcon unavailable={p.outlook.unavailable} size={18} /> : <><AvailabilityIcon doubtful={p.outlook?.doubtful} /><StarterPercent percent={p.starterPercent} /></>}
+                  </span>
                 </li>
               ))}
             </ul>
