@@ -64,9 +64,8 @@ type Picking = { role: number; target: "starters" | "bench"; replace?: string };
 type Candidate = { id: number; name: string; team_name: string; role?: number | null };
 /** Gestori del trascinamento (dito o mouse) e del tocco su un giocatore. */
 type Grab = { onPointerDown: (e: React.PointerEvent) => void; onClick: (e: React.MouseEvent) => void; onContextMenu: (e: React.MouseEvent) => void };
-/** Esempi del formato accettato da «Importa rosa» (formazione incollata come testo). */
+/** Esempio del formato accettato da «Importa rosa», mostrato come segnaposto della casella di testo. */
 const EXAMPLE_LINEUP = "Atletico Mascalzone (3-4-3)\nSommer\nBastoni\nBremer\nBuongiorno\nDimarco\nBarella (C)\nTonali\nCalhanoglu\nLookman\nLautaro (VC)\nKean\n----------\nMeret\nDarmian\nFrattesi\nThuram";
-const EXAMPLE_ROLES = "Modulo 3-4-3\nTitolari\nP Sommer\nD Bastoni, Bremer, Buongiorno\nC Dimarco, Barella (C), Tonali, Calhanoglu\nA Lookman, Lautaro (VC), Kean\nPanchina\nP Meret\nD Darmian\nC Frattesi\nA Thuram";
 const SINGULAR: Record<number, string> = { 1: "portiere", 2: "difensore", 3: "centrocampista", 4: "attaccante" };
 
 /**
@@ -795,30 +794,9 @@ function Editor({ teamId, proxyName, round, deadline, started, liveLabel, scored
 
       <Sheet open={pasting} onClose={() => setPasting(false)} title="Importa rosa">
         <p className="mb-3 text-sm">Puoi incollare qui la tua formazione come testo, per esempio quella condivisa da Leghe Fantacalcio o scritta in chat: FootballLite riconosce modulo, titolari, panchina, capitano e vice e li abbina ai giocatori della tua rosa.</p>
-        <details className="mb-3 rounded-xl border border-line bg-surface-2 p-3 text-sm" open={!pasteText}>
-          <summary className="cursor-pointer font-bold">Formato da incollare</summary>
-          <ul className="mt-2 flex list-disc flex-col gap-1 pl-5 text-xs text-muted">
-            <li>Prima riga: nome della squadra con il modulo tra parentesi, es. <b className="text-ink">(3-4-3)</b>.</li>
-            <li>Poi gli 11 titolari, uno per riga, dal portiere agli attaccanti.</li>
-            <li>Una riga di trattini <b className="text-ink">----------</b> separa i titolari dalla panchina.</li>
-            <li>Sotto, i panchinari nell'ordine delle sostituzioni.</li>
-            <li><b className="text-ink">(C)</b> e <b className="text-ink">(VC)</b> dopo il nome indicano capitano e vice.</li>
-            <li>Basta il cognome come nella rosa; se è ambiguo aggiungi l'iniziale (es. «Martinez L.»).</li>
-          </ul>
-          <div className="mt-3 flex flex-col gap-2">
-            <div>
-              <p className="mb-1 text-[11px] font-bold text-muted">Esempio</p>
-              <pre className="overflow-x-auto rounded-lg border border-line bg-surface p-2 font-mono text-[11px] leading-4 text-ink">{EXAMPLE_LINEUP}</pre>
-            </div>
-            <div>
-              <p className="mb-1 text-[11px] font-bold text-muted">Oppure con i ruoli</p>
-              <pre className="overflow-x-auto rounded-lg border border-line bg-surface p-2 font-mono text-[11px] leading-4 text-ink">{EXAMPLE_ROLES}</pre>
-            </div>
-          </div>
-          <p className="mt-2 text-[11px] text-muted">Senza riga di trattini né «Titolari»/«Panchina», i titolari sono i primi giocatori per ruolo secondo il modulo, oppure i primi 11.</p>
-        </details>
-        <textarea className="h-44 w-full rounded-xl border border-line bg-surface p-3 font-mono text-sm outline-none focus:border-accent" value={pasteText} onChange={(e) => setPasteText(e.target.value)}
-          placeholder="Incolla qui la formazione…" aria-label="Testo della formazione" />
+        <p className="mb-2 text-xs text-muted">Incolla la formazione condivisa da Leghe Fantacalcio (o scritta come nell'esempio): nome squadra con il modulo, gli 11 titolari, una riga di trattini, poi i panchinari in ordine; (C) e (VC) per capitano e vice.</p>
+        <textarea className="h-72 w-full rounded-xl border border-line bg-surface p-3 font-mono text-sm outline-none placeholder:text-muted/70 focus:border-accent" value={pasteText} onChange={(e) => setPasteText(e.target.value)}
+          placeholder={EXAMPLE_LINEUP} aria-label="Testo della formazione" />
         {pasteError && <p className="mt-2 text-sm text-danger">{pasteError}</p>}
         <div className="mt-3 flex gap-2">
           {typeof navigator !== "undefined" && !!navigator.clipboard?.readText && <Button variant="ghost" className="flex-1" onClick={pasteFromClipboard}>Incolla dagli appunti</Button>}
@@ -838,14 +816,12 @@ function Editor({ teamId, proxyName, round, deadline, started, liveLabel, scored
 }
 
 function PitchPlayer({ p, badge, hot, lifted, handlers }: { p: Row; badge: "C" | "VC" | null; hot: boolean; lifted: boolean; handlers: Grab }) {
-  const low = !Number.isNaN(p.starterPercent) && p.starterPercent < 70;
   return (
     <button {...handlers} data-zone={`s:${p.id}`} aria-label={`${p.name}: tocca per le opzioni, trascina per spostarlo`}
       className={`draggable flex w-[74px] cursor-grab flex-col items-center text-center transition ${hot ? "rounded-xl bg-white/25 ring-2 ring-card" : ""} ${lifted ? "opacity-40" : ""}`}>
       <span className="relative rounded-full bg-white/20 p-0.5">
         <Figurine name={p.name} role={p.role} team={p.info.ext_team} size={58} />
         {badge && <span className="absolute -right-1.5 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-card px-1 text-[10px] font-extrabold text-card-ink shadow">{badge}</span>}
-        {low && <span className="absolute -left-1 -top-1 size-3 rounded-full border-2 border-white bg-danger" title="Titolarità sotto il 70%" />}
       </span>
       <span className="-mt-0.5 w-full truncate rounded bg-white px-1 text-[11px] font-extrabold leading-[18px] text-[#13203b] shadow">{p.name}</span>
       <span className="mt-0.5 flex items-center text-[10px] font-semibold leading-3 text-white">
