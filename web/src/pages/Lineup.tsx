@@ -127,6 +127,9 @@ function Editor({ teamId, proxyName, round, deadline, started, liveLabel, scored
    * a quella memorizzata, con il suo modulo.
    */
   const [suggested, setSuggested] = useState<Snapshot | null>(null);
+  // Vista dei titolari: campo (come in Mantra) oppure elenco; la scelta resta sul dispositivo.
+  const [listMode, setListMode] = useState<boolean>(() => { try { return localStorage.getItem("footballlite.lineupView") === "list"; } catch { return false; } });
+  useEffect(() => { try { localStorage.setItem("footballlite.lineupView", listMode ? "list" : "pitch"); } catch { /* memoria non disponibile */ } }, [listMode]);
 
   const shape = moduleShape(module) ?? [0, 0, 0];
   const want: Record<number, number> = { 1: 1, 2: shape[0], 3: shape[1], 4: shape[2] };
@@ -502,7 +505,7 @@ function Editor({ teamId, proxyName, round, deadline, started, liveLabel, scored
   const deadlineText = new Date(deadline).toLocaleString("it-IT", { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
   /** Intestazione grigia di sezione, come nelle liste di Leghe Fantacalcio. */
   const sectionHead = (title: string, right?: React.ReactNode) => (
-    <div className="flex items-center justify-between border-y border-line bg-surface-2 px-4 py-2 text-xs font-extrabold uppercase tracking-wide text-muted">
+    <div className="flex items-center justify-between border-y border-line bg-surface-2 px-4 py-1.5 text-[11px] font-extrabold uppercase tracking-wide text-muted">
       <span>{title}</span>{right && <span className="font-semibold normal-case tracking-normal">{right}</span>}
     </div>
   );
@@ -511,9 +514,9 @@ function Editor({ teamId, proxyName, round, deadline, started, liveLabel, scored
     <>
       {lead}
       <button {...grab(p.id, () => openSheet(p.id))} className="draggable flex min-w-0 flex-1 cursor-grab items-center gap-3 text-left" aria-label={`${p.name}: tocca per le opzioni, trascina per spostarlo`}>
-        <Figurine name={p.name} role={p.role} team={p.info.ext_team} size={36} />
+        <Figurine name={p.name} role={p.role} team={p.info.ext_team} size={32} />
         <span className="min-w-0 flex-1">
-          <span className="flex items-center gap-1.5 truncate text-[15px] font-bold">
+          <span className="flex items-center gap-1.5 truncate text-sm font-bold">
             <RoleTag role={p.role} size={16} />{p.name}
             {badgeOf(p.id) && <span className="rounded bg-card px-1 text-[10px] font-extrabold text-card-ink">{badgeOf(p.id)}</span>}
           </span>
@@ -549,6 +552,9 @@ function Editor({ teamId, proxyName, round, deadline, started, liveLabel, scored
             {suggested ? "Consigliata ✓" : "Consigliata"}
           </button>
         </div>
+        <button type="button" aria-pressed={listMode} onClick={() => setListMode((v) => !v)} className="mt-2 w-full rounded-full border border-white/40 py-1.5 text-xs font-bold hover:bg-white/10">
+          {listMode ? "Modalità mantra" : "Modalità lista"}
+        </button>
       </section>
 
       <div className="flex items-center gap-2 overflow-x-auto border-b border-line bg-surface px-3 py-2" role="radiogroup" aria-label="Modulo">
@@ -579,7 +585,39 @@ function Editor({ teamId, proxyName, round, deadline, started, liveLabel, scored
         )}
       </div>
 
-      <div className={`pitch mt-3 flex flex-col gap-3 px-1 pt-4 pb-6 ${suggested ? "outline-4 -outline-offset-4 outline-card" : ""}`}>
+      {listMode ? (
+        <section className={`mt-3 bg-surface ${suggested ? "outline-4 -outline-offset-4 outline-card" : ""}`} aria-label="Titolari in elenco">
+          {sectionHead("Titolari", `${starters.length}/11${suggested ? " · ★ consigliata" : ""}`)}
+          <ul className="flex flex-col divide-y divide-line">
+            {ROLES.map((role) => [
+              ...startersOf(role).map((p) => (
+                <li key={p.id} data-zone={`s:${p.id}`}>
+                  <button onClick={() => setPicking({ role: p.role, target: "starters", replace: p.id })} className="flex w-full items-center gap-2 px-4 py-1.5 text-left" aria-label={`${p.name}: tocca per sostituirlo`}>
+                    <Figurine name={p.name} role={p.role} team={p.info.ext_team} size={32} />
+                    <span className="min-w-0 flex-1">
+                      <span className="flex items-center gap-1.5 truncate text-sm font-bold">
+                        <RoleTag role={p.role} size={16} />{p.name}
+                        {badgeOf(p.id) && <span className="rounded bg-card px-1 text-[10px] font-extrabold text-card-ink">{badgeOf(p.id)}</span>}
+                      </span>
+                      <span className="block truncate text-xs text-muted">{[prettyTeam(p.info.ext_team), statusText(p.outlook)].filter(Boolean).join(" · ")}</span>
+                    </span>
+                    <Pct p={p} />
+                  </button>
+                </li>
+              )),
+              ...Array.from({ length: Math.max(0, want[role] - startersOf(role).length) }, (_, i) => (
+                <li key={`e${role}${i}`}>
+                  <button onClick={() => setPicking({ role, target: "starters" })} className="flex w-full items-center gap-2 px-4 py-2 text-left text-sm text-muted hover:bg-surface-2" aria-label={`Slot vuoto ${ROLE_NAME[role]}: scegli`}>
+                    <span className="flex size-9 items-center justify-center rounded-full border-2 border-dashed border-line text-lg font-bold">+</span>
+                    <span className="flex items-center gap-1.5"><RoleTag role={role} size={16} />{role === 1 ? "Scegli il portiere" : `Scegli un ${SINGULAR[role]}`}</span>
+                  </button>
+                </li>
+              )),
+            ])}
+          </ul>
+        </section>
+      ) : (
+      <div className={`pitch mt-2 flex flex-col gap-1.5 px-1 pt-3 pb-4 ${suggested ? "outline-4 -outline-offset-4 outline-card" : ""}`}>
         {suggested && (
           <div className="-mt-1 flex justify-center">
             <span className="rounded-full bg-card px-3 py-0.5 text-xs font-bold text-card-ink shadow">★ Formazione consigliata</span>
@@ -596,7 +634,8 @@ function Editor({ teamId, proxyName, round, deadline, started, liveLabel, scored
           </div>
         ))}
       </div>
-      <p className="px-4 pt-1.5 pb-3 text-[11px] text-muted">Tocca un titolare per sostituirlo con un panchinaro o una riserva, uno slot vuoto per scegliere chi schierare; puoi anche trascinare un giocatore sul posto di un altro.</p>
+      )}
+      <p className="px-4 pt-1 pb-2 text-[10px] text-muted">Tocca un titolare per sostituirlo con un panchinaro o una riserva, uno slot vuoto per scegliere chi schierare{listMode ? "" : "; puoi anche trascinare un giocatore sul posto di un altro"}.</p>
 
       <div className="flex flex-col gap-3 px-3 pb-3 empty:hidden">
         {captainOn && (
@@ -620,7 +659,7 @@ function Editor({ teamId, proxyName, round, deadline, started, liveLabel, scored
         {sectionHead("In panchina", `${bench.length} ${bench.length === 1 ? "panchinaro" : "panchinari"}${cfg.benchPerRole ? ` · max ${cfg.benchPerRole.map((n, i) => `${n}${["P", "D", "C", "A"][i]}`).join(" ")}` : ""} · l'ordine conta`)}
         <ol className="flex flex-col divide-y divide-line">
           {benchRows.map((p, i) => (
-            <li key={p.id} data-zone={`b:${i}`} className={`flex items-center gap-2 px-4 py-2 ${hot(`b:${i}`)} ${drag?.id === p.id ? "opacity-40" : ""}`}>
+            <li key={p.id} data-zone={`b:${i}`} className={`flex items-center gap-2 px-4 py-1.5 ${hot(`b:${i}`)} ${drag?.id === p.id ? "opacity-40" : ""}`}>
               {playerRow(p, <span className="w-4 shrink-0 text-center text-sm font-extrabold text-muted tabular">{i + 1}</span>)}
             </li>
           ))}
@@ -652,7 +691,7 @@ function Editor({ teamId, proxyName, round, deadline, started, liveLabel, scored
               <div className="flex items-center justify-between px-4 pt-3 pb-1 text-xs text-muted"><span className="text-[13px] font-extrabold text-ink">{ROLE_NAME[role]}</span><span>{startersOf(role).length}/{want[role]} in campo</span></div>
               <ul className="flex flex-col divide-y divide-line">
                 {list.map((p) => (
-                  <li key={p.id} className={`flex items-center gap-2 px-4 py-2 ${drag?.id === p.id ? "opacity-40" : ""}`}>{playerRow(p)}</li>
+                  <li key={p.id} className={`flex items-center gap-2 px-4 py-1.5 ${drag?.id === p.id ? "opacity-40" : ""}`}>{playerRow(p)}</li>
                 ))}
               </ul>
             </div>
@@ -818,12 +857,12 @@ function Editor({ teamId, proxyName, round, deadline, started, liveLabel, scored
 function PitchPlayer({ p, badge, hot, lifted, handlers }: { p: Row; badge: "C" | "VC" | null; hot: boolean; lifted: boolean; handlers: Grab }) {
   return (
     <button {...handlers} data-zone={`s:${p.id}`} aria-label={`${p.name}: tocca per le opzioni, trascina per spostarlo`}
-      className={`draggable flex w-[74px] cursor-grab flex-col items-center text-center transition ${hot ? "rounded-xl bg-white/25 ring-2 ring-card" : ""} ${lifted ? "opacity-40" : ""}`}>
+      className={`draggable flex w-[66px] cursor-grab flex-col items-center text-center transition ${hot ? "rounded-xl bg-white/25 ring-2 ring-card" : ""} ${lifted ? "opacity-40" : ""}`}>
       <span className="relative rounded-full bg-white/20 p-0.5">
-        <Figurine name={p.name} role={p.role} team={p.info.ext_team} size={58} />
+        <Figurine name={p.name} role={p.role} team={p.info.ext_team} size={48} />
         {badge && <span className="absolute -right-1.5 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-card px-1 text-[10px] font-extrabold text-card-ink shadow">{badge}</span>}
       </span>
-      <span className="-mt-0.5 w-full truncate rounded bg-white px-1 text-[11px] font-extrabold leading-[18px] text-[#13203b] shadow">{p.name}</span>
+      <span className="-mt-0.5 w-full truncate rounded bg-white px-1 text-[10px] font-extrabold leading-4 text-[#13203b] shadow">{p.name}</span>
       <span className="mt-0.5 flex items-center text-[10px] font-semibold leading-3 text-white">
         <Pct p={p} />
       </span>
@@ -835,8 +874,8 @@ function PitchPlayer({ p, badge, hot, lifted, handlers }: { p: Row; badge: "C" |
 function EmptySlot({ role, hot, onClick }: { role: number; hot: boolean; onClick: () => void }) {
   const letter = ["", "P", "D", "C", "A"][role];
   return (
-    <button onClick={onClick} data-zone={`slot:${role}`} className={`flex w-[74px] flex-col items-center text-center text-white transition ${hot ? "rounded-xl bg-white/25 ring-2 ring-card" : ""}`} aria-label={`Slot vuoto ${ROLE_NAME[role]}: scegli`}>
-      <Figurine role={role} size={58} empty />
+    <button onClick={onClick} data-zone={`slot:${role}`} className={`flex w-[66px] flex-col items-center text-center text-white transition ${hot ? "rounded-xl bg-white/25 ring-2 ring-card" : ""}`} aria-label={`Slot vuoto ${ROLE_NAME[role]}: scegli`}>
+      <Figurine role={role} size={48} empty />
       <span className="-mt-0.5 w-full rounded bg-black/30 px-1 text-[11px] font-extrabold leading-[18px]">{letter} · Scegli</span>
     </button>
   );

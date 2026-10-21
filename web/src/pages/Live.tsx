@@ -28,9 +28,13 @@ export function LivePage() {
   const matches = leagueMatches(calendar.data, md!);
   const started = round.data!.phase !== "upcoming";
   if (!matches.length) return <Card title={started ? "Live" : "Altre formazioni"}><Empty>Nessuna partita di lega in questa giornata (calendario non importato o giornata di riposo).</Empty></Card>;
+  // Prima del calcio d'inizio («Altre formazioni») la propria partita non compare: la si gestisce dalla pagina Formazione.
+  const mineOf = (m: CalendarRow) => m.home_team_id === s?.myTeamId || m.away_team_id === s?.myTeamId;
+  const shown = started ? matches : matches.filter((m) => !mineOf(m));
+  if (!shown.length) return <Card title="Altre formazioni"><Empty>Nessun'altra partita di lega in questa giornata.</Empty></Card>;
 
-  const selectedHome = Number(params.get("partita")) || myMatch(calendar.data, md!, s?.myTeamId)?.home_team_id || matches[0].home_team_id;
-  const match = matches.find((m) => m.home_team_id === selectedHome) ?? matches[0];
+  const selectedHome = Number(params.get("partita")) || (started ? myMatch(calendar.data, md!, s?.myTeamId)?.home_team_id : undefined) || shown[0].home_team_id;
+  const match = shown.find((m) => m.home_team_id === selectedHome) ?? shown[0];
   const lineupOf = (tid: number) => lineups.data?.lineups.find((l) => l.team_id === tid);
   const calc = (tid: number, sim: boolean) => teamCalc(tid, rosterOf(data, tid), lineupOf(tid), live.data, cfg, sim, overrides);
   const mc = (m: CalendarRow, sim: boolean) => matchCalc(calc(m.home_team_id, sim), calc(m.away_team_id, sim), cfg);
@@ -43,7 +47,7 @@ export function LivePage() {
   return (
     <div className="flex flex-col gap-4">
       <h1 className="scoreboard text-2xl leading-none">{started ? "Live" : "Altre formazioni"}</h1>
-      {!started && <p className="-mt-2 text-xs text-muted">Le formazioni delle altre squadre si vedono dal primo calcio d'inizio; fino ad allora qui vedi chi ha già inserito la sua. Il risultato è stimato con fantavoto 6 per chi deve giocare.</p>}
+      {!started && <p className="-mt-2 text-xs text-muted">Le partite delle altre squadre: le formazioni si vedono dal primo calcio d'inizio, fino ad allora qui vedi chi ha già inserito la sua. La tua partita è in Home e nella pagina Formazione.</p>}
       <Scoreboard match={match} names={names} calc={current} simulate={simulate} phase={round.data!.phase} />
       {match.home_goals !== null && (
         <section className="rounded-xl border border-accent/40 bg-accent/10 p-3 text-sm">
@@ -63,7 +67,7 @@ export function LivePage() {
 
       <Card title="Altri punteggi">
         <ul className="flex flex-col divide-y divide-line">
-          {matches.filter((m) => m !== match).map((m) => {
+          {shown.filter((m) => m !== match).map((m) => {
             const r = mc(m, simulate);
             const hp = r.result?.home.final ?? r.home?.score.total ?? null;
             const ap = r.result?.away.final ?? r.away?.score.total ?? null;
