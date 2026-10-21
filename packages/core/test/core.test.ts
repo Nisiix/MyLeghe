@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
-  DEFAULT_CONFIG, dueReminder, injuryReasonIt, goalsFromPoints, matchPlayer, normalizeConfig, parseCsv, parseRosterGrid,
+  DEFAULT_CONFIG, dueReminder, injuryReasonIt, SUGGESTED_BENCH, goalsFromPoints, matchPlayer, normalizeConfig, parseCsv, parseRosterGrid,
   parseCalendarGrid, parseLineupText, playerLiveScore, computeTeam, statVote, subRolesFromLineup, voteEligibility, fitCalibration, computeMatch, matchGoals, noLineupScore, scorePlayers, starterDrops, starterProbability, suggestLineup, validateLineup,
   type Cell, type RosterEntry,
 } from "../src";
@@ -9,10 +9,9 @@ const cfg = DEFAULT_CONFIG;
 
 describe("configurazione", () => {
   it("unisce valori salvati e predefiniti scartando quelli non validi", () => {
-    const c = normalizeConfig({ rosterScheme: [3, 8, 8, 6], modules: ["343", "999"], goalSteps: [5], benchCount: "x" });
+    const c = normalizeConfig({ rosterScheme: [3, 8, 8, 6], modules: ["343", "999"], goalSteps: [5] });
     expect(c.modules).toEqual(["343"]);
     expect(c.goalSteps).toEqual([5]);
-    expect(c.benchCount).toBe(DEFAULT_CONFIG.benchCount);
     expect(c.bonus.goal).toEqual([3, 3, 3, 3]);
   });
 
@@ -187,7 +186,7 @@ describe("titolarità e formazione consigliata", () => {
     expect(s.starters[0].id).toBe("p1");
     expect(validateLineup({ starters: s.starters, bench: s.bench, module: s.module }, cfg)).toEqual([]);
     expect(s.captain).not.toBeNull();
-    expect(s.bench.length).toBeLessThanOrEqual(cfg.benchCount);
+    expect(s.bench.length).toBeLessThanOrEqual(SUGGESTED_BENCH);
   });
 });
 
@@ -443,9 +442,10 @@ Esposito Se.
     const r = parseLineupText(shared, roster, cfg);
     expect(r.module).toBe("343");
     expect(r.starters).toEqual(["1", "4", "5", "6", "11", "12", "13", "14", "18", "19", "20"]);
-    expect(r.bench).toEqual(["3", "2", "7", "8", "9", "10", "15"]);
+    // Panchina dinamica: tutti i panchinari del testo, nell'ordine in cui compaiono.
+    expect(r.bench).toEqual(["3", "2", "7", "8", "9", "10", "15", "16", "17", "21"]);
     expect(r.unmatched).toEqual([]);
-    expect(r.warnings.some((w) => w.includes("panchina"))).toBe(true);
+    expect(r.warnings.some((w) => w.includes("panchina"))).toBe(false);
     expect(validateLineup({ starters: r.starters.map((id) => roster.find((p) => p.id === id)!), bench: r.bench.map((id) => roster.find((p) => p.id === id)!), module: r.module! }, cfg)).toEqual([]);
   });
 

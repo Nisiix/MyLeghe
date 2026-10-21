@@ -113,7 +113,6 @@ export function RulesEditor({ config }: { config: LeagueConfig }) {
               ))}
             </div>
           </div>
-          <Num label="Panchinari" value={c.benchCount} step={1} min={0} onChange={(v) => setC({ ...c, benchCount: v })} />
           <Check label="Panchinari fissi per ruolo" checked={!!c.benchPerRole} onChange={(v) => setC({ ...c, benchPerRole: v ? [1, 2, 2, 2] : null })} />
           {c.benchPerRole && (
             <div className="flex flex-wrap gap-3">

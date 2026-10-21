@@ -1,4 +1,4 @@
-import { moduleShape, orderBench, parseLineupText, ROLE_NAME, ROLES, suggestLineup, validateLineup, type LeagueConfig, type ScoredPlayer } from "@footballlite/core";
+import { moduleShape, orderBench, parseLineupText, ROLE_NAME, ROLES, SUGGESTED_BENCH, suggestLineup, validateLineup, type LeagueConfig, type ScoredPlayer } from "@footballlite/core";
 import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
@@ -93,7 +93,7 @@ function Editor({ teamId, proxyName, round, deadline, started, liveLabel, scored
       const starters = keep(from.starters);
       const has = (id: number | null | undefined) => (id != null && starters.includes(String(id)) ? String(id) : null);
       return {
-        module: cfg.modules.includes(from.module) ? from.module : cfg.modules[0], starters, bench: keep(from.bench).slice(0, cfg.benchCount),
+        module: cfg.modules.includes(from.module) ? from.module : cfg.modules[0], starters, bench: keep(from.bench),
         captain: has(from.captain), vice: has(from.vice), source: current ? "saved" as const : "last" as const,
       };
     }
@@ -138,7 +138,7 @@ function Editor({ teamId, proxyName, round, deadline, started, liveLabel, scored
   const errors = validateLineup({ starters: starterRows, bench: benchRows, module, starterIds: starters, captain, vice }, cfg);
   const expected = starterRows.reduce((sum, p) => sum + (Number.isNaN(p.score) ? 0 : p.score), 0);
   const startersOf = (role: number) => starterRows.filter((p) => p.role === role);
-  const benchRoomFor = (role: number) => bench.length < cfg.benchCount && (!cfg.benchPerRole || benchRows.filter((p) => p.role === role).length < cfg.benchPerRole[role - 1]);
+  const benchRoomFor = (role: number) => !cfg.benchPerRole || benchRows.filter((p) => p.role === role).length < cfg.benchPerRole[role - 1];
 
   function clearRoles(id: string) {
     if (captain === id) setCaptain(null);
@@ -215,9 +215,7 @@ function Editor({ teamId, proxyName, round, deadline, started, liveLabel, scored
     const [kind, arg] = zone.split(":");
     const from = starters.includes(id) ? "starter" : bench.includes(id) ? "bench" : "reserve";
     const fail = (text: string) => setMessage({ ok: false, text });
-    const benchFull = (role: number) => bench.length >= cfg.benchCount
-      ? "La panchina è piena: trascina il giocatore su un panchinaro per scambiarli."
-      : `In panchina c'è già il numero massimo di ${ROLE_NAME[role].toLowerCase()}.`;
+    const benchFull = (role: number) => `In panchina c'è già il numero massimo di ${ROLE_NAME[role].toLowerCase()}.`;
     setMessage(null);
     if (kind === "s") {
       const other = arg;
@@ -410,10 +408,10 @@ function Editor({ teamId, proxyName, round, deadline, started, liveLabel, scored
     const nextSet = new Set(next);
     const kept = bench.filter((id) => !nextSet.has(id));
     const dropped = starterRows.filter((p) => !nextSet.has(p.id)).map((p) => p.id);
-    const newBench = [...kept, ...dropped].slice(0, cfg.benchCount);
+    const newBench = [...kept, ...dropped];
     setModule(mod);
     setStarters(next);
-    setBench(newBench.length ? newBench : orderBench(pool.filter((p) => !nextSet.has(p.id)), cfg.benchCount, cfg.benchPerRole).map((p) => p.id));
+    setBench(newBench.length ? newBench : orderBench(pool.filter((p) => !nextSet.has(p.id)), SUGGESTED_BENCH, cfg.benchPerRole).map((p) => p.id));
     if (captain && !nextSet.has(captain)) setCaptain(null);
     if (vice && !nextSet.has(vice)) setVice(null);
     setMessage(null);
@@ -436,7 +434,7 @@ function Editor({ teamId, proxyName, round, deadline, started, liveLabel, scored
       setBench(bench.filter((x) => x !== id));
     } else {
       if (starters.includes(id)) { setStarters(starters.filter((x) => x !== id)); clearRoles(id); }
-      setBench([...bench.filter((x) => x !== id), id].slice(0, cfg.benchCount));
+      setBench([...bench.filter((x) => x !== id), id]);
     }
     setPicking(null);
     setMessage(null);
@@ -620,22 +618,22 @@ function Editor({ teamId, proxyName, round, deadline, started, liveLabel, scored
       </div>
 
       <section data-zone="bench" className={`bg-surface ${hot("bench")}`}>
-        {sectionHead("In panchina", `${bench.length}/${cfg.benchCount}${cfg.benchPerRole ? ` · ${cfg.benchPerRole.map((n, i) => `${n}${["P", "D", "C", "A"][i]}`).join(" ")}` : ""} · l'ordine conta`)}
+        {sectionHead("In panchina", `${bench.length} ${bench.length === 1 ? "panchinaro" : "panchinari"}${cfg.benchPerRole ? ` · max ${cfg.benchPerRole.map((n, i) => `${n}${["P", "D", "C", "A"][i]}`).join(" ")}` : ""} · l'ordine conta`)}
         <ol className="flex flex-col divide-y divide-line">
           {benchRows.map((p, i) => (
             <li key={p.id} data-zone={`b:${i}`} className={`flex items-center gap-2 px-4 py-2 ${hot(`b:${i}`)} ${drag?.id === p.id ? "opacity-40" : ""}`}>
               {playerRow(p, <span className="w-4 shrink-0 text-center text-sm font-extrabold text-muted tabular">{i + 1}</span>)}
             </li>
           ))}
-          {Array.from({ length: Math.max(0, cfg.benchCount - bench.length) }, (_, i) => (
-            <li key={`b${i}`}>
+          {free.some((p) => benchRoomFor(p.role)) && (
+            <li>
               <button className="flex w-full items-center gap-2 px-4 py-2 text-left text-sm text-muted hover:bg-surface-2" onClick={() => setPicking({ role: 0, target: "bench" })}>
-                <span className="w-4 shrink-0 text-center text-sm font-extrabold tabular">{bench.length + i + 1}</span>
+                <span className="w-4 shrink-0 text-center text-sm font-extrabold tabular">{bench.length + 1}</span>
                 <span className="flex size-9 items-center justify-center rounded-full border-2 border-dashed border-line text-lg font-bold">+</span>
                 <span>Aggiungi panchinaro</span>
               </button>
             </li>
-          ))}
+          )}
         </ol>
       </section>
 
@@ -688,9 +686,9 @@ function Editor({ teamId, proxyName, round, deadline, started, liveLabel, scored
             </button>
           );
           const goField = () => (fieldRoom(acting) ? toField(acting) : setChoose(choose === "field" ? null : "field"));
-          const goBench = () => (at === "field" ? benchRoomFor(acting.role) : bench.length < cfg.benchCount && benchRoomFor(acting.role)) ? toBenchSpot(acting) : setChoose(choose === "bench" ? null : "bench");
+          const goBench = () => (benchRoomFor(acting.role) ? toBenchSpot(acting) : setChoose(choose === "bench" ? null : "bench"));
           const fieldSub = fieldRoom(acting) ? `Nello slot libero dei ${ROLE_NAME[acting.role].toLowerCase()}` : `I ${ROLE_NAME[acting.role].toLowerCase()} sono al completo: scegli chi sostituire`;
-          const benchSub = bench.length < cfg.benchCount && benchRoomFor(acting.role) ? `Al posto ${bench.length + 1} della panchina` : "Panchina piena: scegli al posto di chi";
+          const benchSub = benchRoomFor(acting.role) ? `Al posto ${bench.length + 1} della panchina` : "Reparto al completo in panchina: scegli al posto di chi";
           const icons = {
             field: <svg viewBox="0 0 24 24" className="size-5" fill="none" stroke="currentColor" strokeWidth={2} aria-hidden><rect x="4" y="3" width="16" height="18" rx="2" /><path d="M4 12h16" /><circle cx="12" cy="12" r="2.5" /></svg>,
             bench: <svg viewBox="0 0 24 24" className="size-5" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" aria-hidden><path d="M3 11h18M5 11v7M19 11v7M4 7h16" /></svg>,

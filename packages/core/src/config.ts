@@ -68,8 +68,7 @@ export interface LeagueConfig {
   /** Giocatori per ruolo nel file delle rose, nell'ordine P, D, C, A. */
   rosterScheme: [number, number, number, number];
   modules: string[];
-  benchCount: number;
-  /** Panchinari per ruolo [P, D, C, A]; null = liberi entro il totale. */
+  /** Panchinari per ruolo [P, D, C, A]; null = liberi (la panchina non ha un numero fisso: si aggiungono uno alla volta). */
   benchPerRole: [number, number, number, number] | null;
   goalFirst: number;
   /** Ampiezza delle soglie successive (l'ultima si ripete). */
@@ -118,7 +117,6 @@ const all = (v: number) => [v, v, v, v];
 export const DEFAULT_CONFIG: LeagueConfig = {
   rosterScheme: [3, 8, 8, 6],
   modules: ["343", "352", "433", "442", "451", "532", "541"],
-  benchCount: 7,
   benchPerRole: null,
   goalFirst: 66,
   goalSteps: [6],
@@ -181,7 +179,6 @@ export function normalizeConfig(raw: unknown): LeagueConfig {
   return {
     rosterScheme: scheme,
     modules: modules.length ? modules : d.modules,
-    benchCount: Math.max(0, Math.round(num(r.benchCount, d.benchCount))),
     benchPerRole,
     goalFirst: num(r.goalFirst, d.goalFirst),
     goalSteps: steps.length ? steps : d.goalSteps,

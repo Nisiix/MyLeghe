@@ -101,9 +101,12 @@ export function suggestLineup(scored: ScoredPlayer[], cfg: LeagueConfig): Sugges
   best.captain = byScore[0]?.id ?? null;
   best.vice = byScore[1]?.id ?? null;
   const used = new Set(best.starters.map((p) => p.id));
-  best.bench = orderBench(scored.filter((p) => !used.has(p.id)), cfg.benchCount, cfg.benchPerRole);
+  best.bench = orderBench(scored.filter((p) => !used.has(p.id)), SUGGESTED_BENCH, cfg.benchPerRole);
   return best;
 }
+
+/** Panchinari proposti dalla formazione consigliata: la panchina non ha un massimo, se ne aggiungono altri a mano. */
+export const SUGGESTED_BENCH = 7;
 
 /** Panchina in ordine di ruolo (P, D, C, A), i migliori per primi; rispetta i panchinari per ruolo se la lega li fissa. */
 export function orderBench(rest: ScoredPlayer[], count: number, perRole: LeagueConfig["benchPerRole"] = null): ScoredPlayer[] {
@@ -136,7 +139,6 @@ export function validateLineup(l: LineupCheck, cfg: LeagueConfig): string[] {
     });
   }
   if (l.starters.length !== 11) errors.push(`Servono 11 titolari (ora ${l.starters.length})`);
-  if (l.bench.length > cfg.benchCount) errors.push(`Massimo ${cfg.benchCount} panchinari`);
   if (cfg.benchPerRole) {
     ROLES.forEach((r) => {
       const n = l.bench.filter((p) => p.role === r).length;

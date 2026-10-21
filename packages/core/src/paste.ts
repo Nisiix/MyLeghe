@@ -189,11 +189,10 @@ export function parseLineupText(text: string, roster: RosterEntry[], cfg: League
     if (deduced && cfg.modules.includes(deduced)) module = deduced;
   }
   if (starters.length !== 11) warnings.push(`Trovati ${starters.length} titolari invece di 11.`);
-  if (bench.length > cfg.benchCount) warnings.push(`In panchina ci sono ${bench.length} giocatori: la lega ne ammette ${cfg.benchCount}, gli ultimi sono stati esclusi.`);
 
   const captain = starters.find((m) => m.captain)?.id ?? null;
   const vice = starters.find((m) => m.vice && m.id !== captain)?.id ?? null;
-  return { module, starters: starters.map((m) => m.id), bench: bench.slice(0, cfg.benchCount).map((m) => m.id), captain, vice, unmatched, warnings };
+  return { module, starters: starters.map((m) => m.id), bench: bench.map((m) => m.id), captain, vice, unmatched, warnings };
 }
 
 const fmtMod = (m: string) => m.split("").join("-");
